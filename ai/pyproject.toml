@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "ai-service"
+version = "0.1.0"
+description = "Sprite Interpolator AI"
+authors = []
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "^0.118.0"
+uvicorn = {extras=["standard"], version="^0.37.0"}
+torch = "*"
+opencv-python = "*"
+pillow = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
