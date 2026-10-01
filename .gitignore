@@ -1,9 +1,52 @@
+# Environment
 .env
 .env.*
+!.env.example
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.so
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Poetry
+poetry.toml
+
+# Node
 node_modules/
+
+# Build
 dist/
-.vscode/
+build/
+
+# IDE
 .idea/
+.vscode/
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Temporary
+tmp/
+temp/
+
+# Archives
+*.zip
+*.tar
+*.gz

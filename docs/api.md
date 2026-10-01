@@ -1,20 +1,33 @@
 # API
 
-## Frontend -> Backend
+## Архитектура MVP
 
-### POST /process
+```text
+Frontend (React)
+    ↓
+Backend (FastAPI)
+    ↓
+AI Service (PyTorch?)
+```
 
-Загрузка sprite sheet на обработку.
+[[api_sequence_diagram|Подробная диаграмма последовательности]]
 
-Request:
+---
 
-multipart/form-data
+## POST `/process`
 
-Fields:
-- file (png)
-- factor (int, optional)
+Создать задачу обработки спрайт-листа.
 
-Response:
+### Request
+
+`multipart/form-data`
+
+| Поле | Тип | Обязательно | Описание |
+|--------|--------|--------|--------|
+| file | PNG | Да | Sprite sheet |
+| factor | int | Нет | Коэффициент интерполяции |
+
+### Response
 
 ```json
 {
@@ -24,64 +37,120 @@ Response:
 
 ---
 
-### GET /status/{task_id}
+## GET `/status/{task_id}`
 
-Получение статуса обработки.
+Возвращает текущее состояние задачи.
 
-Response:
+### Response
 
 ```json
 {
-  "status": "queued"
+  "status": "processing"
 }
 ```
 
-Возможные статусы:
-- queued
-- processing
-- done
-- error
+#### Возможные состояния
+
+- **queued** - Задача зарегистрирована, но обработка ещё не началась.
+- **processing** - AI-модель выполняет интерполяцию кадров.
+- **done** - Обработка успешно завершена.
+
+  Результат доступен через:
+
+  ```http
+  GET /result/{task_id}
+  ```
+
+- **error** - Во время обработки произошла ошибка.
+
+  В будущем сюда можно добавить подробности:
+
+  ```json
+  {
+    "status": "error",
+    "message": "Invalid PNG format"
+  }
+  ```
+  
+---
+
+## GET `/result/{task_id}`
+
+Возвращает результат обработки.
+
+Вызывается только после получения статуса:
+
+```json
+{
+  "status": "done"
+}
+```
+
+#### Возможные форматы ответа
+
+- PNG - Если результат представляет собой новый sprite sheet.
+- ZIP - Если результат состоит из набора отдельных кадров.
+
+#### Возможное развитие API
+
+Позже можно поддержать:
+
+- PNG
+- ZIP
+- GIF
+- WebP
+- Spine
+- DragonBones
 
 ---
 
-### GET /result/{task_id}
+# Backend → AI
 
-Возвращает итоговый PNG либо архив кадров.
+Backend никогда не взаимодействует напрямую с моделью.
 
----
+Он работает только через API AI-сервиса.
 
-## Backend -> AI
+Это позволяет:
 
-### POST /interpolate
+- менять модель независимо от Backend;
+- запускать модель на отдельной машине;
+- использовать GPU-сервер;
+- тестировать сервисы независимо.
 
-Отправка исходного sprite sheet в AI сервис.
+## POST `/interpolate`
 
-Request:
-- PNG файл
-- настройки интерполяции
+Основной маршрут AI-сервиса.
 
-Response:
-- PNG файл
-или
-- ZIP архив кадров
+Принимает изображение и выполняет интерполяцию кадров.
+
+### Request
+
+`multipart/form-data`
+
+| Поле   | Тип     | Описание                 |
+| ------ | ------- | ------------------------ |
+| file   | PNG     | Исходный sprite sheet    |
+| factor | Integer | Коэффициент интерполяции |
+
+### Response
+
+- PNG
+- ZIP
 
 ---
 
 ## Health Checks
 
-### Backend
+Используются для проверки доступности сервисов.
 
-GET /health
+Полезно для:
 
-```json
-{
-  "status": "ok"
-}
-```
+- Docker;
+- мониторинга;
+- диагностики;
+- CI/CD.
 
-### AI
-
-GET /health
+### GET `/health`
 
 ```json
 {

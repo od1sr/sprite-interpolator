@@ -1,14 +1,15 @@
 [tool.poetry]
+package-mode = false
 name = "backend"
 version = "0.1.0"
-description = "Sprite Interpolator Backend"
+description = ""
 authors = []
 
 [tool.poetry.dependencies]
-python = "^3.12"
-fastapi = "^0.118.0"
-uvicorn = {extras=["standard"], version="^0.37.0"}
-python-multipart = "^0.0.20"
+python = "^3.13"
+fastapi = "^0.142.1"
+uvicorn = {extras=["standard"], version="^0.54.0"}
+python-multipart = "^0.0.32"
 
 [build-system]
 requires = ["poetry-core"]
