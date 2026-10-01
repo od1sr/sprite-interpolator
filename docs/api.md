@@ -10,7 +10,7 @@ Backend (FastAPI)
 AI Service (PyTorch?)
 ```
 
-[[api_sequence_diagram|Подробная диаграмма последовательности]]
+[Подробная диаграмма последовательности](api_sequence_diagram.md)
 
 ---
 
@@ -71,7 +71,7 @@ AI Service (PyTorch?)
     "message": "Invalid PNG format"
   }
   ```
-  
+
 ---
 
 ## GET `/result/{task_id}`

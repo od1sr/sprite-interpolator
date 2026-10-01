@@ -31,4 +31,4 @@ sequenceDiagram
     Backend-->>Frontend: PNG / ZIP
 ```
 
-[[api|Главная страница]]
+[Главная страница](api.md)
