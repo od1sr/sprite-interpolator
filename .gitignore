@@ -13,9 +13,6 @@ __pycache__/
 venv/
 env/
 
-# Poetry
-poetry.toml
-
 # Node
 node_modules/
 
