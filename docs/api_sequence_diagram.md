@@ -52,7 +52,7 @@ sequenceDiagram
         API-->>Front: 422 VALIDATION_ERROR
         Front-->>User: Показывает ошибку запроса
     end
-    Note over API,DB: Файлы не читаются; файловая система не меняется
+    Note over API,DB: Файлы не читаются, файловая система не меняется
 ```
 
 ## 3. Просмотр метаданных видео — 4.3.3
@@ -185,7 +185,7 @@ sequenceDiagram
         end
     end
     Note over Front,API: Опрос прекращается при completed, failed или cancelled
-    Note over API,DB: Запрос только читает БД; файлы не затрагиваются
+    Note over API,DB: Запрос только читает БД, файлы не затрагиваются
 ```
 
 ## 7. Отмена Job — 4.4.3
@@ -310,7 +310,7 @@ sequenceDiagram
     else Result больше недоступен
         API-->>Front: 410 RESOURCE_GONE
     end
-    Note over API,DB: Файл не читается; файловая система не меняется
+    Note over API,DB: Файл не читается, файловая система не меняется
 ```
 
 ## 11. Скачивание результата — 4.4.7
@@ -339,7 +339,7 @@ sequenceDiagram
     else Job не найдена / UUID невалиден / результат ещё не готов
         API-->>Front: 404 / 422 / 409 с JSON error
     end
-    Note over API,FS: Путь хранения не раскрывается клиенту; Backend передаёт файл потоком
+    Note over API,FS: Путь хранения не раскрывается клиенту, Backend передаёт файл потоком
 ```
 
 [Главная страница](api.md)
