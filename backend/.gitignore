@@ -10,6 +10,7 @@ htmlcov/
 
 uploads/
 results/
+storage/
 
 *.log
 

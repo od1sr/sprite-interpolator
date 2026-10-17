@@ -7,9 +7,9 @@
 Репозиторий сейчас содержит начальные заготовки сервисов:
 
 - **Frontend** — React 19 + Vite; пока отображается стартовая страница Vite.
-- **Backend** — FastAPI; реализован health-check.
+- **Backend** — FastAPI, PostgreSQL и Redis/Celery; реализованы загрузка видео, API задач и worker-пайплайн.
 - **AI Service** — FastAPI; реализован health-check, в зависимостях подготовлена основа для PyTorch и обработки изображений.
-- **API и сценарии** — целевые контракты и последовательности описаны в `docs/api.md` и `docs/api_sequence_diagram.md`. Описанные там пользовательские маршруты обработки видео ещё не реализованы в приложениях.
+- **API и сценарии** — контракты и последовательности описаны в `docs/api.md` и `docs/api_sequence_diagram.md`.
 
 ## Структура репозитория
 
@@ -27,8 +27,10 @@ docs/api_sequence_diagram.md Диаграммы пользовательских
 - Node.js 20.19+ или 22.12+
 - Python 3.13
 - Poetry
+- PostgreSQL и Redis для Backend
+- FFprobe (обычно устанавливается вместе с FFmpeg) для проверки видео в Backend; FFmpeg также потребуется компонентам обработки
 
-FFmpeg понадобится для реализации описанных сценариев обработки видео. Docker Compose в репозитории пока нет.
+Docker Compose в репозитории пока нет; PostgreSQL и Redis требуется запустить отдельно.
 
 ## Запуск локально
 
@@ -42,7 +44,7 @@ npm install
 npm run dev
 ```
 
-Vite напечатает локальный адрес frontend. В `frontend/.env.example` указан `VITE_API_URL=http://localhost:8000`; текущая стартовая страница эту переменную пока не использует.
+Vite напечатает локальный адрес frontend. В `frontend/.env.example` указан `VITE_API_URL=http://localhost:8000`.
 
 Для production-сборки доступны команды `npm run build` и `npm run preview`; проверка стиля — `npm run lint`.
 
@@ -51,11 +53,18 @@ Vite напечатает локальный адрес frontend. В `frontend/.
 ```bash
 cd backend
 poetry install
-poetry run uvicorn main:app --reload --port 8000
+cp .env.example .env
+poetry run alembic upgrade head
+poetry run python main.py
 ```
 
+- Celery worker запускается отдельно: `poetry run celery -A app.queue.celery_app worker --loglevel=info` (на Windows для локальной разработки добавьте `--pool=solo`).
 - Health-check: `http://localhost:8000/health`
 - Swagger UI: `http://localhost:8000/docs`
+- Перед запуском настройте PostgreSQL, Redis и FFmpeg/FFprobe в `backend/.env`.
+- Для видео и результатов используются локальные каталоги `backend/storage`; не удаляйте их, пока файлы нужны.
+- Проверка Backend: `poetry run pytest`.
+- Worker и AI Service должны иметь доступ к одной общей файловой системе и видеть `input_uri`/`output_uri` по одинаковым абсолютным путям; на одной машине локальный каталог уже общий.
 
 ### AI Service
 
@@ -68,11 +77,13 @@ poetry run uvicorn main:app --reload --port 8001
 - Health-check: `http://localhost:8001/health`
 - Swagger UI: `http://localhost:8001/docs`
 
-В обоих FastAPI-приложениях сейчас реализован только `/health`. Остальные маршруты из `docs/api.md` являются проектным API-контрактом.
+AI Service пока содержит только health-check; обработчики моделей `/internal/v1/upscale` и `/internal/v1/interpolate` должны быть реализованы в самом AI Service, чтобы задачи успешно завершались.
 
 ## Конфигурация и секреты
 
-В репозитории есть шаблоны `backend/.env.example`, `ai/.env.example` и `frontend/.env.example`. Они фиксируют предполагаемые настройки; Backend и AI Service пока не загружают эти переменные в коде. Vite читает frontend-переменные с префиксом `VITE_`.
+В репозитории есть шаблоны `backend/.env.example`, `ai/.env.example` и `frontend/.env.example`. Backend загружает `backend/.env`; Vite читает frontend-переменные с префиксом `VITE_`.
+
+Backend поддерживает загрузку проверенных MP4/MOV/WebM-видео, очередь задач с этапами `upscale` и `interpolate`, опрос статуса и скачивание готового результата. Для удаления видео сначала удалите связанные завершённые задачи. Склейка видео не входит в опубликованный MVP API-контракт (`docs/api.md`) и этим Backend пока не предоставляется.
 
 Не коммитьте реальные `.env` и `.env.local`, пароли, токены или ключи. В шаблонах используйте только безопасные локальные значения и заглушки для секретов.
 
