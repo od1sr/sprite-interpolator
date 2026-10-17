@@ -10,7 +10,21 @@ python = "^3.13"
 fastapi = "^0.142.1"
 uvicorn = {extras=["standard"], version="^0.54.0"}
 python-multipart = "^0.0.32"
+sqlalchemy = ">=2.0,<3"
+psycopg = {version = ">=3.2,<4", extras = ["binary"]}
+celery = {version = ">=5.5,<6", extras = ["redis"]}
+httpx = ">=0.28,<1"
+alembic = ">=1.15,<2"
+python-dotenv = ">=1,<2"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "pytest (>=8,<9)"
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
