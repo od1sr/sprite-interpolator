@@ -1,0 +1,126 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sprite_interpolator}
+      POSTGRES_USER: ${POSTGRES_USER:-sprite}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sprite}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["sh", "-c", "python wait_for_postgres.py && alembic upgrade head"]
+    environment: &backend-environment
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-sprite}:${POSTGRES_PASSWORD:-sprite}@postgres:5432/${POSTGRES_DB:-sprite_interpolator}
+      REDIS_URL: redis://redis:6379/0
+      AI_SERVICE_URL: http://ai:8001
+      STORAGE_ROOT: /shared/storage
+      FFPROBE_PATH: ffprobe
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:${FRONTEND_PORT:-5173},http://127.0.0.1:${FRONTEND_PORT:-5173}}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment: *backend-environment
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - shared-storage:/shared/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["celery", "-A", "app.queue.celery_app", "worker", "--loglevel=info", "--pool=solo"]
+    environment: *backend-environment
+    volumes:
+      - shared-storage:/shared/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ai:
+    build:
+      context: .
+      dockerfile: ai/Dockerfile
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8001
+      MODEL_PATH: /app/weights
+    ports:
+      - "${AI_PORT:-8001}:8001"
+    volumes:
+      - shared-storage:/shared/storage
+      - ./ai/weights:/app/weights:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/internal/v1/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:${BACKEND_PORT:-8000}/api/v1}
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
+  shared-storage:

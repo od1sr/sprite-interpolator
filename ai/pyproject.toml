@@ -4,16 +4,26 @@ version = "0.1.0"
 package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.13"
+python = ">=3.13,<3.15"
 fastapi = "^0.142.1"
 uvicorn = {extras=["standard"], version="^0.54.0"}
 opencv-python = "^4.8.0"
-# Real-ESRGAN
-basicsr = "^1.4.2"
-realesrgan = "^0.3.0"
+# Keep the Py3.13-incompatible BasicSR sdist out of Poetry's installer. The
+# Docker build patches and installs these model libraries explicitly.
+basicsr = {version = "^1.4.2", optional = true}
+realesrgan = {version = "^0.3.0", optional = true}
+torch = {version = "2.9.1", source = "pytorch-cu126"}
+torchvision = {version = "0.24.1", source = "pytorch-cu126"}
 # RIFE
 safetensors = "^0.4.0"
-huggingface-hub = "^0.20.0"
+
+[tool.poetry.extras]
+models = ["basicsr", "realesrgan"]
+
+[[tool.poetry.source]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+priority = "explicit"
 
 [build-system]
 requires = ["poetry-core"]

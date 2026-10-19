@@ -4,8 +4,7 @@ from fastapi.responses import JSONResponse
 import os
 from contextlib import asynccontextmanager
 
-from upscaler import VideoUpscaler
-from interpolator import VideoInterpolator
+from pathlib import Path
 
 upscaler_model = None
 interpolator_model = None
@@ -14,18 +13,35 @@ interpolator_model = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global upscaler_model, interpolator_model
-    print("Загрузка моделей...")
-    upscaler_model = VideoUpscaler(
-        model_path="weights/realesrgan/realesr-animevideov3.pth",
-        scale=4,
-        tile_size=256,
-        device="cuda",
-    )
-    interpolator_model = VideoInterpolator(
-        model_path="weights/rife/flownet.safetensors",
-        device="cuda",
-    )
-    print("Модели загружены.")
+    weights = Path(os.getenv("MODEL_PATH", "weights"))
+    upscaler_weights = weights / "realesrgan" / "realesr-animevideov3.pth"
+    interpolator_weights = weights / "rife" / "flownet.safetensors"
+
+    # The service should remain usable for health checks when proprietary or
+    # large model weights have not been installed in the deployment yet.
+    if upscaler_weights.is_file():
+        try:
+            from upscaler import VideoUpscaler
+
+            upscaler_model = VideoUpscaler(
+                model_path=str(upscaler_weights), scale=4, tile_size=256, device="cuda"
+            )
+        except Exception as exc:
+            print(f"Не удалось загрузить Real-ESRGAN: {exc}")
+    else:
+        print(f"Веса Real-ESRGAN не найдены: {upscaler_weights}")
+
+    if interpolator_weights.is_file():
+        try:
+            from interpolator import VideoInterpolator
+
+            interpolator_model = VideoInterpolator(
+                model_path=str(interpolator_weights), device="cuda"
+            )
+        except Exception as exc:
+            print(f"Не удалось загрузить RIFE: {exc}")
+    else:
+        print(f"Веса RIFE не найдены: {interpolator_weights}")
     yield
     print("Выключение сервиса.")
 
