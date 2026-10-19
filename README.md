@@ -2,46 +2,57 @@
 
 Сервис для обработки видео: повышение разрешения (upscale) и увеличение частоты кадров (interpolate) с помощью AI.
 
-> **Для новичков:** если ты просто хочешь запустить проект, следуй разделу «Быстрый старт» — он всё сделает сам.
-
 ## Состояние проекта
 
-Это ранняя версия. Из трёх сервисов сейчас полностью работает Backend, а Frontend пока отображает стартовую заглушку Vite.
-
-- **Frontend** — React 19 + Vite. Пока это заглушка, а не готовый интерфейс.
+- **Frontend** — React 19 + Vite. Загрузка видео, запрос на апскейл, скачивание результата (последнее надо пофиксить).
 - **Backend** — FastAPI + PostgreSQL + Redis/Celery. Реализованы загрузка видео, очередь задач, опрос статуса и скачивание результата.
-- **AI Service** — FastAPI + PyTorch. Сейчас есть только health-check; сами обработчики моделей ещё не реализованы.
+- **AI Service** — FastAPI + PyTorch. Есть апскейл, интерполяция.
 
-> То есть загрузить видео и создать задачу уже можно, а сама AI-обработка пока не доведена до конца.
+## Запуск проекта
 
-## Быстрый старт (рекомендуется)
+### Linux
 
-Всё развертывание делает один скрипт — `deploy.py`. Он:
-
-1. проверяет/ставит PostgreSQL и Redis (через [scoop](https://scoop.sh)),
-2. создаёт базу и пользователя,
-3. ставит зависимости Backend, AI и Frontend,
-4. применяет миграции базы,
-5. запускает все сервисы и открывает сайт в браузере,
-6. пишет логи в `deploy/logs/`.
-
-**Запуск (из корня репозитория):**
-
-```powershell
-python deploy.py
+```bash
+cd sprite-interpolator
+./compose.sh
 ```
 
-Сайт откроется автоматически на http://localhost:5173.
+### Windows
 
-Полезные флаги:
+Нужны Windows 10/11, [Docker Desktop](https://www.docker.com/products/docker-desktop/) с включённым WSL 2 и Git. После установки запусти Docker Desktop и дождись статуса **Engine running**. Команды ниже выполняются в PowerShell.
 
 ```powershell
-python deploy.py --only infra      # только PostgreSQL + Redis
-python deploy.py --only backend    # backend + воркер + миграции
-python deploy.py --only frontend   # только фронтенд
-python deploy.py --skip-install    # не ставить зависимости (poetry/npm)
-python deploy.py --no-worker       # не запускать Celery-воркер
+cd sprite-interpolator
+.\compose.cmd
 ```
+
+Стартовый скрипт создаёт корневой `.env` из `.env.example`, только если `.env` ещё нет, затем запускает `docker compose up --build`. Если `.env` уже существует, локальные настройки сохраняются. Compose запускает frontend, backend API, AI Service, Celery worker, PostgreSQL, Redis и миграцию базы. Первый запуск скачивает базовые образы и Python/Node-зависимости, поэтому может занять несколько минут. Оставь окно PowerShell открытым, пока работаешь с приложением.
+
+Порты настраиваются в `.env` рядом с `compose.yaml`. Значения по умолчанию: frontend `5173`, backend `8000`, AI `8001`, PostgreSQL `5432`, Redis `6379`. Если порт занят, поменяй соответствующее значение в `.env`; при смене `BACKEND_PORT` также укажи тот же порт в `VITE_API_URL`, например `http://localhost:8010/api/v1`.
+
+Скрипт передаёт аргументы Docker Compose дальше, поэтому его можно использовать для остальных команд: `.\compose.cmd up --build -d`, `.\compose.cmd ps`, `.\compose.cmd logs -f`, `.\compose.cmd down`. Для полного сброса данных, включая базу и загруженные файлы: `.\compose.cmd down -v`.
+
+### Запуск и пересборка отдельных сервисов
+
+Все команды выполняй в отдельном окне PowerShell из корня проекта. Если сервис ещё не запускался, Compose автоматически поднимет его зависимости. Например, для backend это миграция базы, PostgreSQL, Redis и AI Service.
+
+```powershell
+.\compose.cmd up --build -d frontend   # пересобрать и запустить только frontend
+.\compose.cmd up --build -d backend    # backend и необходимые зависимости
+.\compose.cmd up --build -d ai         # пересобрать и перезапустить AI Service
+.\compose.cmd up --build -d worker     # worker и необходимые зависимости
+.\compose.cmd up -d postgres redis    # только PostgreSQL и Redis
+```
+
+После изменения кода пересобирай и запускай нужный сервис той же командой с `--build`. Для просмотра логов конкретного сервиса используй `.\compose.cmd logs -f frontend`; для перезапуска без пересборки — `.\compose.cmd restart frontend`; для остановки — `.\compose.cmd stop frontend`. Имена сервисов: `frontend`, `backend`, `ai`, `worker`, `postgres`, `redis`, `migrate`. `migrate` — одноразовый сервис миграции базы, он выполняется автоматически как зависимость backend и worker.
+
+AI-контейнер запускается без весов моделей. Для операций обработки положи веса в `ai/weights/realesrgan/realesr-animevideov3.pth` и `ai/weights/rife/flownet.safetensors`; папка подключается в контейнер только для чтения. На компьютере без настроенного GPU стек запускается без NVIDIA GPU (обработка будет выполняться на CPU, если поддерживается приложением). NVIDIA GPU требует отдельной настройки Docker Desktop и драйвера, а также запуска с дополнительным Compose-файлом:
+
+```powershell
+.\compose.cmd -f compose.yaml -f compose.gpu.yaml up --build
+```
+
+Не добавляй GPU-файл в обычный запуск на компьютере без NVIDIA GPU.
 
 Проверить, что всё поднялось:
 
@@ -59,71 +70,7 @@ Test-NetConnection localhost -Port 5432,6379,8000,8001,5173 -InformationLevel Qu
 - Node.js 20.19+ или 22.12+
 - Python 3.13
 - Poetry
-- [scoop](https://scoop.sh) (ставит PostgreSQL и Redis без прав администратора)
 - FFprobe (обычно идёт с FFmpeg) — нужен Backend для проверки видео
-
-### PostgreSQL и Redis
-
-```powershell
-# один раз, если ещё не установлены
-scoop install postgresql redis
-
-# запуск PostgreSQL (каталог данных — persist scoop)
-& "C:\Users\Ivan\scoop\apps\postgresql\current\bin\pg_ctl.exe" start -D "C:\Users\Ivan\scoop\persist\postgresql\data" -l "postgres.log" -w
-
-# запуск Redis
-& "C:\Users\Ivan\scoop\apps\redis\current\redis-server.exe" --port 6379
-```
-
-База и пользователь (`sprite` / `sprite`, база `sprite_interpolator`) создаются скриптом `deploy.py` автоматически.
-
-### Backend
-
-```powershell
-cd backend
-poetry install
-cp .env.example .env
-poetry run alembic upgrade head
-poetry run python main.py
-```
-
-- Health-check: http://localhost:8000/health
-- Swagger UI (вся документация и ручное тестирование API): http://localhost:8000/docs
-
-### Celery worker
-
-Воркер обрабатывает задачи из очереди. Запускается отдельно:
-
-```powershell
-cd backend
-poetry run celery -A app.queue.celery_app worker --loglevel=info --pool=solo
-```
-
-Флаг `--pool=solo` нужен на Windows для локальной разработки.
-
-### AI Service
-
-```powershell
-cd ai
-poetry install
-cp .env.example .env
-poetry run uvicorn main:app --reload --port 8001
-```
-
-- Health-check: http://localhost:8001/health
-- Swagger UI: http://localhost:8001/docs
-
-### Frontend
-
-```powershell
-cd frontend
-npm install
-npm run dev
-```
-
-Адрес frontend печатает Vite при старте (обычно http://localhost:5173/). В `frontend/.env.example` указан `VITE_API_URL=http://localhost:8000`.
-
-Для production-сборки: `npm run build` и `npm run preview`. Проверка стиля: `npm run lint`.
 
 ## Структура репозитория
 
@@ -133,7 +80,6 @@ backend/                     FastAPI + PostgreSQL + Redis/Celery
 ai/                          FastAPI + PyTorch
 docs/api.md                  Контракт внешнего и внутреннего API
 docs/api_sequence_diagram.md Диаграммы пользовательских сценариев
-deploy.py                    Скрипт полного развертывания и запуска
 ```
 
 ## Конфигурация и секреты

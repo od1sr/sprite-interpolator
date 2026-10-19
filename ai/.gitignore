@@ -6,7 +6,12 @@ __pycache__/
 
 models/
 checkpoints/
-weights/
+# Keep the model directories and their placeholders, but ignore downloaded weights.
+weights/*
+!weights/*/
+weights/*/*
+!weights/.gitkeep
+!weights/*/.gitkeep
 
 runs/
 outputs/

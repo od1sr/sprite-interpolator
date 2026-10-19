@@ -47,3 +47,5 @@ temp/
 *.zip
 *.tar
 *.gz
+
+compose.gpu.yaml

@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import os
 from typing import AsyncIterator
 
 from fastapi import FastAPI
@@ -25,8 +26,12 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173", "http://127.0.0.1:5173",
-        "http://localhost:5174", "http://127.0.0.1:5174"
+        origin.strip()
+        for origin in os.getenv(
+            "FRONTEND_ORIGINS",
+            "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174",
+        ).split(",")
+        if origin.strip()
     ],
     allow_methods=["*"],
     allow_headers=["*"],
