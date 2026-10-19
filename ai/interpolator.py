@@ -115,51 +115,78 @@ class VideoInterpolator:
         n_mid = (1 << level) - 1
         actual_fps = source_fps * factor
 
-        # Edge case: single-frame video
-        if total_frames < 2:
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(output_path, fourcc, actual_fps, (width, height))
-            ret, frame = cap.read()
-            if ret:
-                out.write(frame)
-            cap.release()
-            out.release()
-            return self._result(output_path, width, height, actual_fps,
-                                total_frames / source_fps, source_fps, factor, n_mid)
+        import os, tempfile, subprocess, shutil
 
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(output_path, fourcc, actual_fps, (width, height))
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
-        ret, prev = cap.read()
-        if not ret:
-            cap.release()
-            out.release()
-            raise IOError("Video has no decodable frames")
-
-        out.write(prev)
-        processed = 0
-        report_every = max(1, (total_frames - 1) // 10)
+        fd, temp_video = tempfile.mkstemp(suffix='_tmp.mp4')
+        os.close(fd)
 
         try:
-            while True:
-                ret, curr = cap.read()
+            if total_frames < 2:
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                out = cv2.VideoWriter(temp_video, fourcc, actual_fps, (width, height))
+                ret, frame = cap.read()
+                if ret:
+                    out.write(frame)
+                cap.release()
+                out.release()
+            else:
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                out = cv2.VideoWriter(temp_video, fourcc, actual_fps, (width, height))
+                ret, prev = cap.read()
                 if not ret:
-                    break
-                if level > 0:
-                    for m in self._generate_between(prev, curr, level):
-                        out.write(m)
-                out.write(curr)
-                prev = curr.copy()
-                processed += 1
-                if processed % report_every == 0:
-                    pct = 100 * processed // (total_frames - 1)
-                    print(f"[interpolate] {processed}/{total_frames-1} pairs ({pct}%), factor={factor}x")
-        finally:
-            cap.release()
-            out.release()
+                    cap.release()
+                    out.release()
+                    raise IOError("Video has no decodable frames")
+                out.write(prev)
+                processed = 0
+                report_every = max(1, (total_frames - 1) // 10)
+                try:
+                    while True:
+                        ret, curr = cap.read()
+                        if not ret:
+                            break
+                        if level > 0:
+                            for m in self._generate_between(prev, curr, level):
+                                out.write(m)
+                        out.write(curr)
+                        prev = curr.copy()
+                        processed += 1
+                        if processed % report_every == 0:
+                            pct = 100 * processed // (total_frames - 1)
+                            print(f"[interpolate] {processed}/{total_frames-1} pairs ({pct}%), factor={factor}x")
+                finally:
+                    cap.release()
+                    out.release()
 
-        return self._result(output_path, width, height, actual_fps,
-                            total_frames / source_fps, source_fps, factor, n_mid)
+            audio_file = None
+            try:
+                fd_a, audio_file = tempfile.mkstemp(suffix='_audio.m4a')
+                os.close(fd_a)
+                extract_cmd = ['ffmpeg', '-y', '-i', input_path, '-vn', '-c:a', 'aac', audio_file]
+                subprocess.run(extract_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+                if os.path.exists(audio_file) and os.path.getsize(audio_file) > 0:
+                    merge_cmd = ['ffmpeg', '-y', '-i', temp_video, '-i', audio_file,
+                                 '-c:v', 'copy', '-c:a', 'copy', '-shortest', output_path]
+                    subprocess.run(merge_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+                else:
+                    shutil.copy2(temp_video, output_path)
+            finally:
+                if audio_file and os.path.exists(audio_file):
+                    try:
+                        os.remove(audio_file)
+                    except OSError:
+                        pass
+
+            return self._result(output_path, width, height, actual_fps,
+                                total_frames / source_fps, source_fps, factor, n_mid)
+        finally:
+            try:
+                if os.path.exists(temp_video):
+                    os.remove(temp_video)
+            except OSError:
+                pass
 
     @staticmethod
     def _result(path, w, h, fps, dur, src_fps, factor, n_mid) -> dict:

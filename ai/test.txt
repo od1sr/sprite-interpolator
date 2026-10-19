@@ -1,12 +1,12 @@
 $body = @{
-    input_uri  = "D:/sprite-interpolator/ai/test_input.mp4"
+    input_uri  = "D:/sprite-interpolator/ai/test2.mp4"
     output_uri = "D:/sprite-interpolator/ai/test_upscaled.mp4"
-    params     = @{ scale = 4; tile_size = 256 }
+    params     = @{ scale = 2; tile_size = 512 }
 } | ConvertTo-Json -Compress
 
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 $result = Invoke-RestMethod -Uri "http://localhost:8001/internal/v1/upscale" `
-    -Method POST -ContentType "application/json" -Body $body -TimeoutSec 900
+    -Method POST -ContentType "application/json" -Body $body -TimeoutSec 9000
 $sw.Stop()
 
 Write-Host "Время: $($sw.Elapsed.TotalSeconds) сек"
@@ -14,9 +14,9 @@ $result | ConvertTo-Json -Depth 5
 
 
 $body = @{
-    input_uri  = "D:/sprite-interpolator/ai/test_upscaled.mp4"
+    input_uri  = "D:/sprite-interpolator/ai/test2.mp4"
     output_uri = "D:/sprite-interpolator/ai/test_interp.mp4"
-    params     = @{ target_fps = 120 }
+    params     = @{ target_fps = 60 }
 } | ConvertTo-Json -Compress
 
 $sw = [System.Diagnostics.Stopwatch]::StartNew()

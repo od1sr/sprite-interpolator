@@ -2,6 +2,9 @@
 import cv2
 import numpy as np
 import torch
+import subprocess
+import os
+import tempfile
 from pathlib import Path
 from basicsr.archs.rrdbnet_arch import RRDBNet
 from realesrgan import RealESRGANer
@@ -63,41 +66,69 @@ class VideoUpscaler:
         out_width = width * self.scale
         out_height = height * self.scale
 
-        # Настройка VideoWriter
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # или 'avc1' для H.264
-        out = cv2.VideoWriter(output_path, fourcc, fps, (out_width, out_height))
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
-        processed_frames = 0
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
+        # Сохраняем видео БЕЗ аудио во временный файл через OpenCV
+        fd, temp_video = tempfile.mkstemp(suffix='_tmp.mp4')
+        os.close(fd)
 
-            # Real-ESRGAN ожидает BGR-изображение (как у OpenCV)
+        try:
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out = cv2.VideoWriter(temp_video, fourcc, fps, (out_width, out_height))
+
+            processed_frames = 0
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                try:
+                    output_frame, _ = self.upsampler.enhance(frame, outscale=self.scale)
+                except RuntimeError as e:
+                    print(f"Ошибка при обработке кадра: {e}. Попробуйте уменьшить tile_size.")
+                    raise
+                out.write(output_frame)
+                processed_frames += 1
+                if processed_frames % 100 == 0:
+                    print(f"Обработано кадров: {processed_frames}/{total_frames}")
+            cap.release()
+            out.release()
+
+            # Извлекаем аудио из исходного и склеиваем с обработанным видео
+            audio_file = None
             try:
-                output_frame, _ = self.upsampler.enhance(frame, outscale=self.scale)
-            except RuntimeError as e:
-                # Если не хватает памяти, можно попробовать уменьшить tile_size
-                print(f"Ошибка при обработке кадра: {e}. Попробуйте уменьшить tile_size.")
-                raise
+                fd_a, audio_file = tempfile.mkstemp(suffix='_audio.m4a')
+                os.close(fd_a)
+                # Копируем аудио без перекодирования если возможно
+                extract_cmd = ['ffmpeg', '-y', '-i', input_path, '-vn', '-c:a', 'aac', audio_file]
+                subprocess.run(extract_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+                if os.path.exists(audio_file) and os.path.getsize(audio_file) > 0:
+                    merge_cmd = ['ffmpeg', '-y', '-i', temp_video, '-i', audio_file,
+                                 '-c:v', 'copy', '-c:a', 'copy', '-shortest', output_path]
+                    subprocess.run(merge_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+                else:
+                    # Нет аудио или не удалось извлечь, просто копируем видео
+                    import shutil
+                    shutil.copy2(temp_video, output_path)
+            finally:
+                if audio_file and os.path.exists(audio_file):
+                    try:
+                        os.remove(audio_file)
+                    except OSError:
+                        pass
 
-            out.write(output_frame)
-            processed_frames += 1
-
-            if processed_frames % 100 == 0:
-                print(f"Обработано кадров: {processed_frames}/{total_frames}")
-
-        cap.release()
-        out.release()
-
-        # Собираем метаданные результата
-        result = {
-            "status": "completed",
-            "output_uri": output_path,
-            "width": out_width,
-            "height": out_height,
-            "fps": fps,
-            "duration_seconds": total_frames / fps if fps > 0 else 0,
-            "size_bytes": Path(output_path).stat().st_size if Path(output_path).exists() else 0,
-        }
-        return result
+            result = {
+                "status": "completed",
+                "output_uri": output_path,
+                "width": out_width,
+                "height": out_height,
+                "fps": fps,
+                "duration_seconds": total_frames / fps if fps > 0 else 0,
+                "size_bytes": Path(output_path).stat().st_size if Path(output_path).exists() else 0,
+            }
+            return result
+        finally:
+            try:
+                if os.path.exists(temp_video):
+                    os.remove(temp_video)
+            except OSError:
+                pass
