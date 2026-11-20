@@ -9,17 +9,17 @@ import {
   uploadVideo,
 } from './api/client';
 import type { AdaptationMode, ExportJob, Job, Result, Video } from './types/api';
-import { useAuth } from '../front2/src/hooks/useAuth';
-import { useProjects } from '../front2/src/hooks/useProjects';
-import Sidebar from '../front2/src/components/Sidebar';
-import Auth from '../front2/src/views/Auth';
-import Billing from '../front2/src/views/Billing';
-import Dashboard from '../front2/src/views/Dashboard';
-import Landing from '../front2/src/views/Landing';
-import Admin from '../front2/src/views/Admin';
-import NewProcess from '../front2/src/views/NewProcess';
-import Projects from '../front2/src/views/Projects';
-import Settings from '../front2/src/views/Settings';
+import { useAuth } from './hooks/useAuth';
+import { useProjects } from './hooks/useProjects';
+import Sidebar from './components/Sidebar';
+import Auth from './views/Auth';
+import Billing from './views/Billing';
+import Dashboard from './views/Dashboard';
+import Landing from './views/Landing';
+import Admin from './views/Admin';
+import NewProcess from './views/NewProcess';
+import Projects from './views/Projects';
+import Settings from './views/Settings';
 import './App.css';
 
 type View = 'landing' | 'auth' | 'dashboard' | 'new' | 'adapt' | 'projects' | 'settings' | 'billing' | 'admin';
