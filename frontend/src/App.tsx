@@ -1,185 +1,844 @@
-// src/App.tsx
-import { useState, useEffect } from 'react';
-import { uploadVideo, createJob, getJobStatus, getJobResult } from './api/client';
-import type { Video, Job, Result } from './types/api';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  createJob,
+  createVideoExport,
+  getJobResult,
+  getJobStatus,
+  getVideoExport,
+  resolveApiUrl,
+  uploadVideo,
+} from './api/client';
+import type { AdaptationMode, ExportJob, Job, Result, Video } from './types/api';
+import { useAuth } from '../front2/src/hooks/useAuth';
+import { useProjects } from '../front2/src/hooks/useProjects';
+import Sidebar from '../front2/src/components/Sidebar';
+import Auth from '../front2/src/views/Auth';
+import Billing from '../front2/src/views/Billing';
+import Dashboard from '../front2/src/views/Dashboard';
+import Landing from '../front2/src/views/Landing';
+import Admin from '../front2/src/views/Admin';
+import NewProcess from '../front2/src/views/NewProcess';
+import Projects from '../front2/src/views/Projects';
+import Settings from '../front2/src/views/Settings';
+import './App.css';
 
-function App() {
-  const [video, setVideo] = useState<Video | null>(null);
-  const [job, setJob] = useState<Job | null>(null);
-  const [result, setResult] = useState<Result | null>(null);
-  
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+type View = 'landing' | 'auth' | 'dashboard' | 'new' | 'adapt' | 'projects' | 'settings' | 'billing' | 'admin';
 
-  // 1. Обработка загрузки файла с ВАЛИДАЦИЕЙ
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+interface ExportProfile {
+  id: string;
+  platform: string;
+  contentType: string;
+  title: string;
+  dimensions: string;
+  aspectRatio: string;
+  codec: string;
+  backendSupported: boolean;
+}
 
-    setError(null); // Сбрасываем старые ошибки
+type ExportTask = ExportJob & { source: 'backend' | 'local' };
 
-    // ВАЛИДАЦИЯ 1: Проверка размера (например, лимит 100 МБ)
-    const MAX_SIZE = 100 * 1024 * 1024; // 100 MB в байтах
-    if (file.size > MAX_SIZE) {
-      setError('Файл слишком большой. Максимальный размер: 100 МБ.');
-      event.target.value = ''; // Очищаем инпут
-      return;
-    }
+interface TaskView {
+  id: string;
+  name: string;
+  kind: string;
+  status: string;
+  progress: number;
+  message?: string;
+  downloadUrl?: string;
+  createdAt: string;
+}
 
-    // ВАЛИДАЦИЯ 2: Проверка типа файла (MIME)
-    if (!file.type.startsWith('video/')) {
-      setError('Пожалуйста, выберите видеофайл (mp4, mov, webm и т.д.).');
-      event.target.value = ''; // Очищаем инпут
-      return;
-    }
+const EXPORT_PROFILES: ExportProfile[] = [
+  {
+    id: 'youtube_standard_v1',
+    platform: 'YouTube',
+    contentType: 'Обычное видео',
+    title: 'YouTube — обычное видео',
+    dimensions: '1920 × 1080',
+    aspectRatio: '16:9',
+    codec: 'MP4 · H.264 · AAC',
+    backendSupported: true,
+  },
+  {
+    id: 'youtube_shorts_v1',
+    platform: 'YouTube',
+    contentType: 'Shorts',
+    title: 'YouTube — Shorts',
+    dimensions: '1080 × 1920',
+    aspectRatio: '9:16',
+    codec: 'MP4 · H.264 · AAC',
+    backendSupported: false,
+  },
+  {
+    id: 'rutube_standard_v1',
+    platform: 'RUTUBE',
+    contentType: 'Обычное видео',
+    title: 'RUTUBE — обычное видео',
+    dimensions: '1920 × 1080',
+    aspectRatio: '16:9',
+    codec: 'MP4 · H.264 · AAC',
+    backendSupported: false,
+  },
+  {
+    id: 'rutube_shorts_v1',
+    platform: 'RUTUBE',
+    contentType: 'Shorts',
+    title: 'RUTUBE — Shorts',
+    dimensions: '1080 × 1920',
+    aspectRatio: '9:16',
+    codec: 'MP4 · H.264 · AAC',
+    backendSupported: false,
+  },
+  {
+    id: 'tiktok_vertical_v1',
+    platform: 'TikTok',
+    contentType: 'Вертикальное видео',
+    title: 'TikTok — вертикальное',
+    dimensions: '1080 × 1920',
+    aspectRatio: '9:16',
+    codec: 'MP4 · H.264 · AAC',
+    backendSupported: true,
+  },
+  {
+    id: 'vk_standard_v1',
+    platform: 'VK Видео',
+    contentType: 'Обычное видео',
+    title: 'VK Видео — обычное',
+    dimensions: '1920 × 1080',
+    aspectRatio: '16:9',
+    codec: 'MP4 · H.264 · AAC',
+    backendSupported: false,
+  },
+  {
+    id: 'vk_clips_v1',
+    platform: 'VK Клипы',
+    contentType: 'Клипы',
+    title: 'VK Клипы',
+    dimensions: '1080 × 1920',
+    aspectRatio: '9:16',
+    codec: 'MP4 · H.264 · AAC',
+    backendSupported: false,
+  },
+];
 
-    setLoading(true);
-    try {
-      const uploadedVideo = await uploadVideo(file);
-      setVideo(uploadedVideo);
-    } catch (err: any) {
-      // Здесь мы ловим ошибки от сервера (например, если бэкенд ответил 415)
-      // Наш ApiError из client.ts содержит поле code
-      if (err.code === 'VIDEO_TOO_LARGE') {
-        setError('Сервер отклонил файл: превышен лимит размера.');
-      } else if (err.code === 'UNSUPPORTED_MEDIA_TYPE') {
-        setError('Сервер не поддерживает этот формат видео.');
-      } else {
-        setError(err.message || 'Ошибка при загрузке');
-      }
+const ADAPTATION_MODES: { value: AdaptationMode; label: string; description: string }[] = [
+  { value: 'crop', label: 'Crop', description: 'Заполнить кадр, обрезав края' },
+  { value: 'pad', label: 'Pad', description: 'Вписать видео с полями' },
+  { value: 'blur', label: 'Blur background', description: 'Заполнить фон размытой копией' },
+];
 
-    } finally {
-      setLoading(false);
-    }
+const VIEW_TITLES: Record<View, string> = {
+  landing: 'Zarya',
+  auth: 'Вход',
+  dashboard: 'Обзор',
+  new: 'Новая обработка',
+  adapt: 'Адаптация под платформу',
+  projects: 'Проекты',
+  settings: 'Настройки аккаунта',
+  billing: 'Тариф и оплата',
+  admin: 'Админ-панель',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  queued: 'В очереди',
+  analyzing: 'Анализ видео',
+  preparing: 'Подготовка',
+  processing: 'В обработке',
+  validating: 'Проверка результата',
+  completed: 'Готово',
+  ready: 'Готово',
+  failed: 'Ошибка',
+  cancelling: 'Отмена',
+  cancelled: 'Отменено',
+  unavailable: 'Не подключён',
+};
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(0)} КБ`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} МБ`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} ГБ`;
+}
+
+function FileDropzone({
+  file,
+  onFile,
+  disabled,
+}: {
+  file: File | null;
+  onFile: (file: File) => void;
+  disabled: boolean;
+}) {
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const chooseFile = () => {
+    if (!disabled) inputRef.current?.click();
   };
 
-  // 2. Запуск задачи (Job)
-  const handleStartJob = async () => {
-    if (!video) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const newJob = await createJob(video.id, [
-        { type: 'upscale', parameters: { scale: 2 } }
-      ]);
-      setJob(newJob);
-    } catch (err: any) {
-      setError(err.message || 'Ошибка при создании задачи');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 3. Эффект для опроса статуса (Polling)
-  useEffect(() => {
-    if (!job || ['completed', 'failed', 'cancelled'].includes(job.status)) {
-      return;
-    }
-
-    const interval = setInterval(async () => {
-      try {
-        const updatedJob = await getJobStatus(job.id);
-        setJob(updatedJob);
-        
-        // Если задача упала с ошибкой, показываем её
-        if (updatedJob.status === 'failed' && updatedJob.error) {
-          setError(`Ошибка обработки: ${updatedJob.error.message}`);
-        }
-      } catch (err) {
-        console.error("Ошибка поллинга", err);
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [job]);
-
-  // 4. Запрос результата
-  useEffect(() => {
-    if (job?.status === 'completed' && !result) {
-      getJobResult(job.id).then(setResult).catch(console.error);
-    }
-  }, [job?.status, result, job?.id]);
-
-  
-  const handleReset = () => {
-    setVideo(null);
-    setJob(null);
-    setResult(null);
-    setError(null);
+  const acceptFile = (candidate?: File) => {
+    if (!disabled && candidate) onFile(candidate);
   };
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif', maxWidth: '600px', margin: '0 auto' }}>
-      <h1>Видео Сервис (Локалка)</h1>
+    <div
+      className={`dropzone${dragging ? ' drag' : ''}${disabled ? ' is-disabled' : ''}`}
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled}
+      onClick={chooseFile}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          chooseFile();
+        }
+      }}
+      onDragOver={(event) => {
+        event.preventDefault();
+        if (!disabled) setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(event) => {
+        event.preventDefault();
+        setDragging(false);
+        acceptFile(event.dataTransfer.files[0]);
+      }}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm"
+        onClick={(event) => event.stopPropagation()}
+        onChange={(event) => {
+          acceptFile(event.currentTarget.files?.[0]);
+          event.currentTarget.value = '';
+        }}
+      />
+      <div className="dz-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 16V4" />
+          <path d="m7 9 5-5 5 5" />
+          <path d="M4 16v2.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V16" />
+        </svg>
+      </div>
+      <div className="dz-title">{file ? file.name : 'Перетащите видео сюда'}</div>
+      <div className="dz-sub">
+        {file
+          ? 'Нажмите, чтобы заменить файл'
+          : 'или нажмите, чтобы выбрать · MP4, MOV, WebM · до 2 ГБ'}
+      </div>
+    </div>
+  );
+}
 
-      {/* Блок ошибки */}
-      {error && (
-        <div style={{ padding: '10px', background: '#ffdddd', border: '1px solid red', color: 'darkred', marginBottom: '20px' }}>
-          ⚠️ {error}
-        </div>
-      )}
+function SourcePanel({
+  file,
+  video,
+  onFile,
+  disabled,
+}: {
+  file: File | null;
+  video: Video | null;
+  onFile: (file: File) => void;
+  disabled: boolean;
+}) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-      {/* ЭТАП 1: Загрузка */}
-      {!video && !job && (
-        <div>
-          <h2>1. Загрузите видео</h2>
-          <p style={{ fontSize: '14px', color: 'gray' }}>Поддерживаются видеофайлы до 100 МБ</p>
-          <input type="file" accept="video/*" onChange={handleFileUpload} disabled={loading} />
-          {loading && <p>Загрузка...</p>}
-        </div>
-      )}
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl(null);
+      return;
+    }
 
-      {/* ЭТАП 2: Создание задачи */}
-      {video && !job && (
-        <div>
-          <h2>2. Файл загружен</h2>
-          <p>Имя: {video.filename} | Размер: {(video.size_bytes / 1024 / 1024).toFixed(2)} MB</p>
-          <button onClick={handleStartJob} disabled={loading} style={{ padding: '10px 20px', cursor: 'pointer' }}>
-            {loading ? 'Создание...' : 'Запустить Upscale (x2)'}
-          </button>
-        </div>
-      )}
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
-      {/* ЭТАП 3: Ожидание (Polling) */}
-      {job && job.status !== 'completed' && job.status !== 'failed' && (
-        <div>
-          <h2>3. Обработка видео</h2>
-          <p>Статус: <b>{job.status}</b></p>
-          <p>Прогресс: {job.progress}%</p>
-          <div style={{ width: '100%', background: '#eee', height: '20px', borderRadius: '10px', overflow: 'hidden' }}>
-            <div style={{ width: `${job.progress}%`, background: 'blue', height: '100%', transition: 'width 0.5s' }}></div>
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h3>1. Исходное видео</h3>
+        <span className="muted-sm">MP4 · MOV · WebM</span>
+      </div>
+      {!file ? (
+        <FileDropzone file={file} onFile={onFile} disabled={disabled} />
+      ) : (
+        <>
+          <div className="source-preview">
+            {previewUrl && <video src={previewUrl} controls />}
+            <div className="source-details">
+              <div className="source-detail">
+                <span>Файл</span>
+                <strong title={file.name}>{file.name}</strong>
+              </div>
+              <div className="source-detail">
+                <span>Размер</span>
+                <strong>{formatBytes(file.size)}</strong>
+              </div>
+              {video && (
+                <>
+                  <div className="source-detail">
+                    <span>Разрешение</span>
+                    <strong>
+                      {video.width && video.height ? `${video.width} × ${video.height}` : '—'}
+                    </strong>
+                  </div>
+                  <div className="source-detail">
+                    <span>Частота кадров</span>
+                    <strong>{video.fps ? `${video.fps} FPS` : '—'}</strong>
+                  </div>
+                  <div className="source-detail">
+                    <span>Длительность</span>
+                    <strong>
+                      {video.duration_seconds
+                        ? `${Math.floor(video.duration_seconds / 60)}:${Math.floor(video.duration_seconds % 60)
+                            .toString()
+                            .padStart(2, '0')}`
+                        : '—'}
+                    </strong>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* ЭТАП 4: Результат */}
-      {job?.status === 'completed' && result && (
-        <div>
-          <h2>4. Готово!</h2>
-          <p>Разрешение: {result.width}x{result.height} | FPS: {result.fps}</p>
-          <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-            <a href={result.download_url} download style={{ display: 'inline-block', padding: '10px 20px', background: 'green', color: 'white', textDecoration: 'none', borderRadius: '5px' }}>
-              Скачать видео
-            </a>
-            <button onClick={handleReset} style={{ padding: '10px 20px', background: '#ccc', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
-              Загрузить другое
-            </button>
+          <div style={{ marginTop: 16 }}>
+            <FileDropzone file={file} onFile={onFile} disabled={disabled} />
           </div>
-        </div>
+        </>
       )}
+    </section>
+  );
+}
 
-      {/* ЭТАП 5: Ошибка задачи */}
-      {job?.status === 'failed' && (
-         <div>
-           <h2>Обработка не удалась</h2>
-           <p>Вы можете попробовать снова.</p>
-           <button onClick={handleReset} style={{ padding: '10px 20px', background: '#ccc', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
-              Вернуться к загрузке
-            </button>
-         </div>
+function TaskRow({ task }: { task: TaskView }) {
+  const isReady = task.status === 'ready' || task.status === 'completed';
+  const isFailed = task.status === 'failed';
+  const isUnavailable = task.status === 'unavailable';
+  const tone = isReady ? 'pill-ok' : isFailed ? 'pill-err' : task.status === 'queued' || isUnavailable ? '' : 'pill-run';
+  const progress = Math.max(0, Math.min(100, task.progress));
+
+  return (
+    <div className="proj">
+      <div className="thumb" aria-hidden="true" />
+      <div className="proj-main">
+        <div className="proj-name">
+          <span title={task.name}>{task.name}</span>
+          <span className={`pill ${tone}`}>{STATUS_LABELS[task.status] || task.status}</span>
+        </div>
+        <div className="proj-meta">{task.kind} · {task.message || `Задача ${task.id.slice(0, 8)}`}</div>
+        {task.status === 'ready' && !task.downloadUrl && (
+          <div className="task-result-message">
+            Экспорт завершён. Ссылка на скачивание пока недоступна.
+          </div>
+        )}
+      </div>
+      <div className="proj-bar">
+        <div className={`bar${isReady ? ' done' : ''}`}>
+          <i style={{ width: `${isReady ? 100 : progress}%` }} />
+        </div>
+        <span className="pct">{Math.round(isReady ? 100 : progress)}%</span>
+      </div>
+      {task.downloadUrl && (
+        <a className="btn btn-ghost btn-sm" href={task.downloadUrl} download>
+          Скачать
+        </a>
       )}
     </div>
   );
 }
 
-export default App;
+export default function App() {
+  const { user, isLoading, login, register, logout, getPlan, updateProfile } = useAuth();
+  const { projects: sampleProjects } = useProjects();
+  const [view, setView] = useState<View>('landing');
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [file, setFile] = useState<File | null>(null);
+  const [video, setVideo] = useState<Video | null>(null);
+  const [job, setJob] = useState<Job | null>(null);
+  const [exportJobs, setExportJobs] = useState<ExportTask[]>([]);
+  const [result, setResult] = useState<Result | null>(null);
+  const [scale, setScale] = useState<number>(2);
+  const [fps, setFps] = useState<number>(60);
+  const [profileIds, setProfileIds] = useState<string[]>([EXPORT_PROFILES[0].id]);
+  const [adaptationMode, setAdaptationMode] = useState<AdaptationMode>('crop');
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const selectedProfiles = EXPORT_PROFILES.filter((profile) => profileIds.includes(profile.id));
+  const hasPipelineSteps = scale > 1 || fps > 0;
+
+  const handleFile = (selectedFile: File) => {
+    setFile(selectedFile);
+    setVideo(null);
+    setJob(null);
+    setExportJobs([]);
+    setResult(null);
+    setProcessing(false);
+    setError(null);
+  };
+
+  const handleSubmit = async () => {
+    if (!file || !hasPipelineSteps) return;
+    setProcessing(true);
+    setError(null);
+
+    try {
+      const sourceVideo = video ?? await uploadVideo(file);
+      setVideo(sourceVideo);
+
+      const steps = [];
+      if (scale > 1) steps.push({ type: 'upscale', parameters: { scale: Number(scale) } });
+      if (fps > 0) steps.push({ type: 'interpolate', parameters: { target_fps: Number(fps) } });
+
+      setJob(await createJob(sourceVideo.id, steps));
+    } catch (requestError) {
+      setError(getErrorMessage(requestError, 'Ошибка при отправке задачи'));
+      setProcessing(false);
+    }
+  };
+
+  const handleExportSubmit = async () => {
+    if (!file) return;
+    if (!selectedProfiles.length) {
+      setError('Выберите хотя бы один профиль экспорта');
+      return;
+    }
+    setProcessing(true);
+    setError(null);
+
+    try {
+      const sourceVideo = video ?? await uploadVideo(file);
+      setVideo(sourceVideo);
+      const outcomes = await Promise.allSettled(selectedProfiles.map(async (profile): Promise<ExportTask> => {
+        if (!profile.backendSupported) {
+          return {
+            id: `local-${profile.id}-${Date.now()}`,
+            video_id: sourceVideo.id,
+            profile_id: profile.id,
+            adaptation_mode: adaptationMode,
+            status: 'unavailable',
+            progress: 0,
+            output_path: null,
+            error_code: 'PROFILE_NOT_CONFIGURED',
+            user_message: 'Профиль пока не подключён к обработке',
+            created_at: new Date().toISOString(),
+            source: 'local',
+          };
+        }
+
+        return { ...await createVideoExport(sourceVideo.id, profile.id, adaptationMode), source: 'backend' };
+      }));
+      const created = outcomes.flatMap((outcome) => outcome.status === 'fulfilled' ? [outcome.value] : []);
+      const failures = outcomes.filter((outcome) => outcome.status === 'rejected');
+      setExportJobs((current) => [...current, ...created]);
+
+      const hasActiveExports = created.some((task) =>
+        task.source === 'backend' && !['ready', 'failed', 'cancelled', 'unavailable'].includes(task.status));
+      setProcessing(hasActiveExports);
+      if (failures.length) {
+        const firstFailure = failures[0];
+        setError(
+          `${failures.length} профиль(я) не удалось запустить. ${getErrorMessage(
+            firstFailure.status === 'rejected' ? firstFailure.reason : undefined,
+            'Проверьте выбранные профили и повторите попытку.',
+          )}`,
+        );
+      }
+    } catch (requestError) {
+      setError(getErrorMessage(requestError, 'Не удалось запустить экспорт'));
+      setProcessing(false);
+    }
+  };
+
+  const pendingExportIds = exportJobs
+    .filter((task) => task.source === 'backend' && !['ready', 'failed', 'cancelled', 'unavailable'].includes(task.status))
+    .map((task) => task.id)
+    .join('|');
+
+  useEffect(() => {
+    if (!job) return;
+    if (['completed', 'failed', 'cancelled'].includes(job.status)) {
+      setProcessing(false);
+      return;
+    }
+
+    const interval = window.setInterval(async () => {
+      try {
+        setJob(await getJobStatus(job.id));
+      } catch (pollError) {
+        console.error(pollError);
+      }
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [job]);
+
+  useEffect(() => {
+    const pendingIds = pendingExportIds ? pendingExportIds.split('|') : [];
+    if (!pendingIds.length) return;
+
+    const interval = window.setInterval(async () => {
+      const updates = new Map<string, ExportJob>();
+      await Promise.all(pendingIds.map(async (id) => {
+        try {
+          updates.set(id, await getVideoExport(id));
+        } catch (pollError) {
+          console.error(pollError);
+        }
+      }));
+      setExportJobs((current) => current.map((task) => {
+        const updated = updates.get(task.id);
+        return updated ? { ...updated, source: task.source } : task;
+      }));
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [pendingExportIds]);
+
+  useEffect(() => {
+    const exportsAreDone = exportJobs.length > 0
+      && exportJobs.every((task) => ['ready', 'failed', 'cancelled', 'unavailable'].includes(task.status));
+    const jobIsDone = !job || ['completed', 'failed', 'cancelled'].includes(job.status);
+    if (exportsAreDone && jobIsDone) setProcessing(false);
+  }, [exportJobs, job]);
+
+  useEffect(() => {
+    if (job?.status !== 'completed' || result) return;
+    getJobResult(job.id)
+      .then(setResult)
+      .catch((requestError: unknown) => {
+        setError(getErrorMessage(requestError, 'Не удалось получить результат обработки'));
+      });
+  }, [job?.id, job?.status, result]);
+
+  const tasks = useMemo<TaskView[]>(() => {
+    const items: TaskView[] = [];
+    if (job) {
+      items.push({
+        id: job.id,
+        name: file?.name || `Обработка ${job.id.slice(0, 8)}`,
+        kind: 'Апскейл и интерполяция',
+        status: job.status,
+        progress: job.progress ?? 0,
+        message: job.error?.message || job.message,
+        downloadUrl: result ? resolveApiUrl(result.download_url) : undefined,
+        createdAt: job.created_at,
+      });
+    }
+    exportJobs.forEach((exportJob) => {
+      const exportProfile = EXPORT_PROFILES.find((profile) => profile.id === exportJob.profile_id);
+      items.push({
+        id: exportJob.id,
+        name: file?.name || `Экспорт ${exportJob.id.slice(0, 8)}`,
+        kind: exportProfile?.title || exportJob.profile_id,
+        status: exportJob.status,
+        progress: exportJob.progress,
+        message: exportJob.user_message || exportJob.error_code || undefined,
+        createdAt: exportJob.created_at,
+      });
+    });
+    return items.sort((first, second) => second.createdAt.localeCompare(first.createdAt));
+  }, [exportJobs, file?.name, job, result]);
+
+  const projectsForUi = useMemo(() => {
+    if (!tasks.length) {
+      return sampleProjects;
+    }
+
+    return tasks.map((task, index) => ({
+      id: task.id,
+      name: task.name,
+      status: task.status === 'ready' || task.status === 'completed'
+        ? 'done'
+        : task.status === 'failed'
+          ? 'err'
+          : task.status === 'unavailable'
+            ? 'unavailable'
+          : task.status === 'queued'
+            ? 'queue'
+            : 'run',
+      progress: task.progress,
+      meta: `${task.kind}${task.message ? ` · ${task.message}` : ''}`,
+      hue: 205 + index * 24,
+      downloadUrl: task.downloadUrl,
+    }));
+  }, [sampleProjects, tasks]);
+
+  const handleQuickFile = (selectedFile: File) => {
+    handleFile(selectedFile);
+    setView('new');
+  };
+
+  const renderTaskList = (items: TaskView[]) => (
+    items.length ? (
+      <div className="proj-list">{items.map((task) => <TaskRow key={task.id} task={task} />)}</div>
+    ) : (
+      <div className="empty">Задач пока нет. Создайте обработку, чтобы она появилась здесь.</div>
+    )
+  );
+
+  const renderWorkflowStatus = () => {
+    const visibleTasks = tasks;
+    return visibleTasks.length ? (
+      <section className="panel">
+        <div className="panel-head"><h3>Статус обработки</h3></div>
+        {renderTaskList(visibleTasks)}
+      </section>
+    ) : null;
+  };
+
+  const setProfileOrientation = (aspectRatio: string) => {
+    setProfileIds(EXPORT_PROFILES
+      .filter((profile) => profile.aspectRatio === aspectRatio)
+      .map((profile) => profile.id));
+  };
+
+  const isOrientationSelected = (aspectRatio: string) => {
+    const matchingProfiles = EXPORT_PROFILES.filter((profile) => profile.aspectRatio === aspectRatio);
+    return selectedProfiles.length === matchingProfiles.length
+      && matchingProfiles.every((profile) => profileIds.includes(profile.id));
+  };
+
+  const renderProcessView = () => (
+    <>
+      <NewProcess
+        file={file}
+        video={video}
+        onFile={handleFile}
+        scale={scale}
+        setScale={setScale}
+        fps={fps}
+        setFps={setFps}
+        processing={processing}
+        hasPipelineSteps={hasPipelineSteps}
+        onStart={handleSubmit}
+        onOpenAdaptation={() => setView('adapt')}
+      />
+      {renderWorkflowStatus()}
+    </>
+  );
+
+  const renderAdaptView = () => (
+    <>
+      <div className="welcome">
+        <div>
+          <span className="welcome-eyebrow">Экспорт</span>
+          <h2 className="welcome-title">Адаптация под платформу</h2>
+          <p className="welcome-sub">Создайте отдельный экспорт для каждого выбранного профиля платформы.</p>
+        </div>
+      </div>
+
+      <SourcePanel file={file} video={video} onFile={handleFile} disabled={processing} />
+
+      <section className="panel">
+        <div className="panel-head">
+          <h3>2. Профиль экспорта</h3>
+          <span className="muted-sm">Выберите одну или несколько платформ</span>
+        </div>
+        <div className="format-presets">
+          <span>Быстрый выбор ориентации</span>
+          <button
+            type="button"
+            className={isOrientationSelected('16:9') ? 'active' : ''}
+            onClick={() => setProfileOrientation('16:9')}
+            disabled={processing}
+          >
+            Альбомная · 16:9
+          </button>
+          <button
+            type="button"
+            className={isOrientationSelected('9:16') ? 'active' : ''}
+            onClick={() => setProfileOrientation('9:16')}
+            disabled={processing}
+          >
+            Книжная · 9:16
+          </button>
+        </div>
+        <p className="format-help">
+          Ориентация задаётся профилем экспорта. Способ вписывания изображения выберите ниже.
+        </p>
+        <div className="profile-options">
+          {EXPORT_PROFILES.map((profile) => (
+            <label
+              key={profile.id}
+              className={`profile-option${profileIds.includes(profile.id) ? ' selected' : ''}`}
+            >
+              <input
+                type="checkbox"
+                name="export-profile"
+                value={profile.id}
+                checked={profileIds.includes(profile.id)}
+                onChange={(event) => {
+                  setProfileIds((current) => event.target.checked
+                    ? [...current, profile.id]
+                    : current.filter((id) => id !== profile.id));
+                }}
+                disabled={processing}
+              />
+              <b>{profile.platform}</b>
+              <span>{profile.contentType}</span>
+              <span>{profile.dimensions} · {profile.aspectRatio}</span>
+            </label>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <h3>3. Способ адаптации</h3>
+          <span className="muted-sm">Исходная частота кадров сохраняется</span>
+        </div>
+        <div className="mode-options">
+          {ADAPTATION_MODES.map((mode) => (
+            <label
+              key={mode.value}
+              className={`mode-option${adaptationMode === mode.value ? ' selected' : ''}`}
+            >
+              <input
+                type="radio"
+                name="adaptation-mode"
+                value={mode.value}
+                checked={adaptationMode === mode.value}
+                onChange={() => setAdaptationMode(mode.value)}
+                disabled={processing}
+              />
+              <b>{mode.label}</b>
+              <span>{mode.description}</span>
+            </label>
+          ))}
+        </div>
+        {adaptationMode === 'crop' && (
+          <div className="notice warning" style={{ marginTop: 14 }}>
+            При центральном кадрировании часть изображения может быть обрезана.
+          </div>
+        )}
+        <div className="panel-foot">
+          <div className="estimate">
+            {selectedProfiles.length
+              ? selectedProfiles.map((profile) => `${profile.title} · ${profile.dimensions} · ${profile.codec}`).join(' / ')
+              : 'Выберите профиль экспорта'}
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={handleExportSubmit}
+            disabled={!file || processing}
+          >
+            {processing ? 'Экспорт…' : `Запустить экспорт${selectedProfiles.length > 1 ? ` · ${selectedProfiles.length}` : ''}`}
+          </button>
+        </div>
+        {exportJobs.length > 0 && (
+          <div className="status-detail">
+            Экспортов в текущей сессии: {exportJobs.length} · Каждая задача обрабатывается отдельно.
+          </div>
+        )}
+      </section>
+      {renderWorkflowStatus()}
+    </>
+  );
+
+  const renderDashboard = () => (
+    <>
+      <Dashboard
+        user={user}
+        projects={projectsForUi}
+        onAddProject={handleQuickFile}
+        onNewProcess={() => setView('new')}
+      />
+      {tasks.length > 0 && (
+        <section className="panel">
+          <div className="panel-head"><h3>Статусы из backend</h3></div>
+          {renderTaskList(tasks.slice(0, 4))}
+        </section>
+      )}
+    </>
+  );
+
+  const renderProjects = () => (
+    <>
+      <Projects projects={projectsForUi} />
+      {tasks.length > 0 && (
+        <section className="panel">
+          <div className="panel-head"><h3>Текущая сессия</h3></div>
+          {renderTaskList(tasks)}
+        </section>
+      )}
+    </>
+  );
+
+  const renderView = () => {
+    switch (view) {
+      case 'new':
+        return renderProcessView();
+      case 'adapt':
+        return renderAdaptView();
+      case 'projects':
+        return renderProjects();
+      case 'settings':
+        return <Settings user={user} onUpdateProfile={updateProfile} />;
+      case 'billing':
+        return <Billing currentPlan={getPlan()} onPlanChange={(plan: string) => updateProfile({ plan })} />;
+      case 'admin':
+        return <Admin />;
+      default:
+        return renderDashboard();
+    }
+  };
+
+  if (isLoading) return <div style={{ padding: 40, textAlign: 'center' }}>Загрузка...</div>;
+
+  if (!user) {
+    if (view === 'auth') {
+      return (
+        <Auth
+          mode={authMode}
+          setMode={setAuthMode}
+          onLogin={(email: string, name: string) => {
+            login(email, name);
+            setView('dashboard');
+          }}
+          onRegister={(name: string, email: string) => {
+            register(name, email);
+            setView('dashboard');
+          }}
+          onBack={() => setView('landing')}
+        />
+      );
+    }
+
+    return <Landing onAuthClick={(mode: 'login' | 'register') => {
+      setAuthMode(mode);
+      setView('auth');
+    }} />;
+  }
+
+  return (
+    <div id="appShell">
+      <Sidebar
+        currentView={view}
+        setView={(nextView: View) => setView(nextView)}
+        user={user}
+        getPlan={getPlan}
+        onLogout={() => {
+          logout();
+          setView('landing');
+        }}
+      />
+      <div className="app-main">
+        <header className="topbar">
+          <h1>{VIEW_TITLES[view]}</h1>
+          <div className="topbar-actions">
+            <a className="btn btn-ghost btn-sm" href={resolveApiUrl('/docs')} target="_blank" rel="noreferrer">
+              Документация API
+            </a>
+          </div>
+        </header>
+        <main className="content">
+          {error && <div className="error-banner" role="alert">⚠️ {error}</div>}
+          {renderView()}
+        </main>
+      </div>
+    </div>
+  );
+}

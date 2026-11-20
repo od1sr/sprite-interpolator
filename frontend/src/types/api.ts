@@ -4,7 +4,7 @@
 export type JobStatus = 'queued' | 'processing' | 'completed' | 'failed' | 'cancelling' | 'cancelled';
 
 
-export type StepType = 'upscale' | 'interpolate' | 'restore';
+export type StepType = 'upscale' | 'interpolate' | 'restore' | 'format';
 
 
 export interface Video {
@@ -69,5 +69,27 @@ export interface Result {
   height: number | null;
   fps: number | null;
   download_url: string;
+  created_at: string;
+}
+
+export type PlatformType = 'youtube' | 'tiktok' | 'vk';
+
+export interface PlatformParams {
+  platform: PlatformType;
+  resolution: string;
+}
+
+export type AdaptationMode = 'crop' | 'pad' | 'blur';
+
+export interface ExportJob {
+  id: string;
+  video_id: string;
+  profile_id: string;
+  adaptation_mode: AdaptationMode;
+  status: string;
+  progress: number;
+  output_path: string | null;
+  error_code: string | null;
+  user_message: string | null;
   created_at: string;
 }

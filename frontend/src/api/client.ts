@@ -1,5 +1,5 @@
 // src/api/client.ts
-import type { Video, Job, Result } from '../types/api';
+import type { AdaptationMode, ExportJob, Video, Job, Result, StepType, PlatformParams } from '../types/api';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
@@ -56,7 +56,7 @@ export async function createJob(video_id: string, steps: any[]): Promise<Job> {
     await delay(1000);
     const now = new Date().toISOString();
     return {
-      id: "fake-job-456",
+      id: "test-job-456",
       video_id,
       status: "queued",
       steps: steps.map((s) => ({ ...s, status: 'queued', progress: 0, created_at: now, updated_at: now })),
@@ -123,7 +123,7 @@ export async function getJobResult(job_id: string): Promise<Result> {
       width: 3840,
       height: 2160,
       fps: 60,
-      download_url: "/api/v1/jobs/fake-job-456/result/download",
+      download_url: "/upscaled.mp4",
       created_at: new Date().toISOString()
     };
   }
@@ -131,4 +131,72 @@ export async function getJobResult(job_id: string): Promise<Result> {
   // РЕАЛЬНЫЙ ЗАПРОС
   const response = await fetch(`${BASE_URL}/jobs/${job_id}/result`);
   return handleResponse<Result>(response);
+}
+
+export async function formatVideoForPlatform(video_id: string, params: PlatformParams): Promise<Job> {
+  if (USE_MOCKS) {
+    console.log('Мок: форматирование под', params.platform);
+    await delay(1500); // Имитация работы сервера
+    
+    const now = new Date().toISOString();
+    return {
+      id: `fake-format-${Date.now()}`,
+      video_id: video_id,
+      status: "completed",
+      steps: [
+        {
+          type: 'format' as StepType,
+          status: 'completed',
+          parameters: params,
+          progress: 100,
+          created_at: now,
+          updated_at: now
+        }
+      ],
+      progress: 100,
+      current_step: 0,
+      message: `Видео успешно подогнано под ${params.platform}`,
+      result_id: "fake-result-format-123",
+      error: null,
+      created_at: now,
+      updated_at: now,
+      started_at: now,
+      finished_at: now
+    };
+  }
+
+  // РЕАЛЬНЫЙ ЗАПРОС (заготовка на будущее)
+  const response = await fetch(`${BASE_URL}/jobs/format`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ video_id, parameters: params }),
+  });
+  
+  if (!response.ok) throw new Error('Ошибка при форматировании');
+  return response.json();
+}
+
+export async function createVideoExport(
+  videoId: string,
+  profileId: string,
+  adaptationMode: AdaptationMode,
+): Promise<ExportJob> {
+  const response = await fetch(`${BASE_URL}/videos/${videoId}/exports`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      profile_id: profileId,
+      adaptation_mode: adaptationMode,
+    }),
+  });
+  return handleResponse<ExportJob>(response);
+}
+
+export async function getVideoExport(exportId: string): Promise<ExportJob> {
+  const response = await fetch(`${BASE_URL}/exports/${exportId}`);
+  return handleResponse<ExportJob>(response);
+}
+
+export function resolveApiUrl(path: string): string {
+  return new URL(path, `${BASE_URL.replace(/\/+$/, '')}/`).toString();
 }
