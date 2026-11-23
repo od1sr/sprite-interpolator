@@ -8,14 +8,12 @@ export default function ProjectRow({ project }) {
   const isDone = project.status === 'done';
   const isRun = project.status === 'run';
   const isErr = project.status === 'err';
-  const isUnavailable = project.status === 'unavailable';
   
   let pillClass = 'pill';
   let pillText = 'В очереди';
   if (isDone) { pillClass += ' pill-ok'; pillText = 'Готово'; }
   if (isRun) { pillClass += ' pill-run'; pillText = 'В обработке'; }
   if (isErr) { pillClass += ' pill-err'; pillText = 'Ошибка'; }
-  if (isUnavailable) { pillText = 'Не подключён'; }
 
   useEffect(() => {
     if (!menuOpen) return undefined;

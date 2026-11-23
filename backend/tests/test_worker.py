@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
-from app.models import Job, Video
+from app.models import ExportJob, Job, Video
 
 
 @pytest.fixture
@@ -205,3 +205,37 @@ def test_cancellation_wins_if_ai_fails_after_cancellation_was_requested(worker_c
         assert job.error is None
         assert job.steps[0]["status"] == "cancelled"
         assert job.steps[0]["error"] is None
+
+
+def test_export_worker_runs_ffmpeg_and_persists_download_path(worker_context, monkeypatch):
+    worker, sessions, root, _ = worker_context
+    export_id = uuid4()
+    profile = {"width": 1080, "height": 1920}
+    with sessions.begin() as session:
+        video = session.scalar(select(Video))
+        session.add(
+            ExportJob(
+                id=export_id,
+                video_id=video.id,
+                profile_id="tiktok_vertical_v1",
+                config_snapshot=profile,
+                adaptation_mode="blur",
+                status="queued",
+            )
+        )
+
+    def fake_export(input_path, output_path, config, mode):
+        assert input_path.is_file()
+        assert config == profile
+        assert mode == "blur"
+        output_path.write_bytes(b"adapted")
+
+    monkeypatch.setattr(worker, "run_ffmpeg_export", fake_export)
+    worker.process_export_job.run(str(export_id))
+
+    with sessions() as session:
+        export = session.get(ExportJob, export_id)
+        assert export.status == "ready"
+        assert export.progress == 100
+        assert export.output_path == f"exports/{export_id}/result.mp4"
+        assert (root / export.output_path).read_bytes() == b"adapted"

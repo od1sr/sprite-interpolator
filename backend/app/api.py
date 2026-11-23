@@ -5,20 +5,29 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 
+from app.config import EXPORT_PROFILES, settings
+
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from fastapi.responses import FileResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.database import get_session
 from app.errors import APIError
 from app.media import probe_video
-from app.models import Job, Result, Video
+from app.models import ExportJob, Job, Result, Video
 from app.queue import celery_app
-from app.schemas import JobCreate, JobResponse, ResultResponse, VideoPage, VideoResponse
-from app.worker import process_job
+from app.schemas import (
+    ExportJobCreate,
+    ExportJobResponse,
+    JobCreate,
+    JobResponse,
+    ResultResponse,
+    VideoPage,
+    VideoResponse,
+)
+from app.worker import process_export_job, process_job
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1")
@@ -34,6 +43,15 @@ def _video_path(video: Video) -> Path:
 
 def _result_path(result: Result) -> Path:
     path = (settings.storage_root / result.storage_key).resolve()
+    if not path.is_relative_to(settings.storage_root.resolve()):
+        raise APIError(500, "INTERNAL_ERROR", "Не удалось получить файл из хранилища")
+    return path
+
+
+def _export_path(job: ExportJob) -> Path:
+    if not job.output_path:
+        raise APIError(410, "RESOURCE_GONE", "Файл экспорта больше недоступен")
+    path = (settings.storage_root / job.output_path).resolve()
     if not path.is_relative_to(settings.storage_root.resolve()):
         raise APIError(500, "INTERNAL_ERROR", "Не удалось получить файл из хранилища")
     return path
@@ -114,6 +132,16 @@ def _enqueue_job(session: Session, job: Job) -> None:
         process_job.apply_async(args=[str(job.id)])
     except Exception as exc:
         logger.exception("Failed to enqueue job %s", job.id)
+        session.delete(job)
+        session.commit()
+        raise APIError(503, "SERVICE_UNAVAILABLE", "Очередь задач временно недоступна") from exc
+
+
+def _enqueue_export_job(session: Session, job: ExportJob) -> None:
+    try:
+        process_export_job.apply_async(args=[str(job.id)])
+    except Exception as exc:
+        logger.exception("Failed to enqueue export %s", job.id)
         session.delete(job)
         session.commit()
         raise APIError(503, "SERVICE_UNAVAILABLE", "Очередь задач временно недоступна") from exc
@@ -427,3 +455,61 @@ def download_job_result(job_id: UUID, session: Session = Depends(get_session)) -
         filename=result.filename,
         headers={"Content-Length": str(actual_size)},
     )
+
+@router.post("/videos/{video_id}/exports", response_model=ExportJobResponse, status_code=202)
+def create_export(
+    video_id: UUID,
+    payload: ExportJobCreate,
+    session: Session = Depends(get_session),
+) -> ExportJob:
+    video = session.get(Video, video_id)
+    if not video:
+        _raise_not_found("video")
+    if not _video_path(video).is_file():
+        raise APIError(409, "INVALID_STATE", "Исходный файл больше недоступен")
+
+    profile = EXPORT_PROFILES.get(payload.profile_id)
+    if not profile:
+        raise APIError(404, "RESOURCE_NOT_FOUND", "Профиль экспорта не найден")
+
+    if payload.adaptation_mode not in profile["allowed_modes"]:
+        raise APIError(
+            422,
+            "VALIDATION_ERROR",
+            f"Режим {payload.adaptation_mode} не поддерживается для этого профиля",
+        )
+
+    job = ExportJob(
+        video_id=video_id,
+        profile_id=payload.profile_id,
+        config_snapshot=profile,
+        adaptation_mode=payload.adaptation_mode,
+        status="queued",
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    _enqueue_export_job(session, job)
+    return job
+
+
+@router.get("/exports/{export_id}", response_model=ExportJobResponse)
+def get_export(export_id: UUID, session: Session = Depends(get_session)) -> ExportJob:
+    job = session.get(ExportJob, export_id)
+    if not job:
+        _raise_not_found("export_job")
+    return job
+
+
+@router.get("/exports/{export_id}/download")
+def download_export(export_id: UUID, session: Session = Depends(get_session)) -> FileResponse:
+    job = session.get(ExportJob, export_id)
+    if job is None:
+        _raise_not_found("export_job")
+    if job.status != "ready":
+        raise APIError(409, "INVALID_STATE", "Экспорт ещё не готов", {"status": job.status})
+
+    path = _export_path(job)
+    if not path.is_file():
+        raise APIError(410, "RESOURCE_GONE", "Файл экспорта больше недоступен")
+    return FileResponse(path=path, media_type="video/mp4", filename=path.name)

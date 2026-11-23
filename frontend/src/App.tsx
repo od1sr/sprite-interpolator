@@ -10,7 +10,6 @@ import {
 } from './api/client';
 import type { AdaptationMode, ExportJob, Job, Result, Video } from './types/api';
 import { useAuth } from './hooks/useAuth';
-import { useProjects } from './hooks/useProjects';
 import Sidebar from './components/Sidebar';
 import Auth from './views/Auth';
 import Billing from './views/Billing';
@@ -32,10 +31,9 @@ interface ExportProfile {
   dimensions: string;
   aspectRatio: string;
   codec: string;
-  backendSupported: boolean;
 }
 
-type ExportTask = ExportJob & { source: 'backend' | 'local' };
+type ExportTask = ExportJob;
 
 interface TaskView {
   id: string;
@@ -56,38 +54,7 @@ const EXPORT_PROFILES: ExportProfile[] = [
     title: 'YouTube — обычное видео',
     dimensions: '1920 × 1080',
     aspectRatio: '16:9',
-    codec: 'MP4 · H.264 · AAC',
-    backendSupported: true,
-  },
-  {
-    id: 'youtube_shorts_v1',
-    platform: 'YouTube',
-    contentType: 'Shorts',
-    title: 'YouTube — Shorts',
-    dimensions: '1080 × 1920',
-    aspectRatio: '9:16',
-    codec: 'MP4 · H.264 · AAC',
-    backendSupported: false,
-  },
-  {
-    id: 'rutube_standard_v1',
-    platform: 'RUTUBE',
-    contentType: 'Обычное видео',
-    title: 'RUTUBE — обычное видео',
-    dimensions: '1920 × 1080',
-    aspectRatio: '16:9',
-    codec: 'MP4 · H.264 · AAC',
-    backendSupported: false,
-  },
-  {
-    id: 'rutube_shorts_v1',
-    platform: 'RUTUBE',
-    contentType: 'Shorts',
-    title: 'RUTUBE — Shorts',
-    dimensions: '1080 × 1920',
-    aspectRatio: '9:16',
-    codec: 'MP4 · H.264 · AAC',
-    backendSupported: false,
+    codec: 'MP4, H.264, AAC',
   },
   {
     id: 'tiktok_vertical_v1',
@@ -96,28 +63,7 @@ const EXPORT_PROFILES: ExportProfile[] = [
     title: 'TikTok — вертикальное',
     dimensions: '1080 × 1920',
     aspectRatio: '9:16',
-    codec: 'MP4 · H.264 · AAC',
-    backendSupported: true,
-  },
-  {
-    id: 'vk_standard_v1',
-    platform: 'VK Видео',
-    contentType: 'Обычное видео',
-    title: 'VK Видео — обычное',
-    dimensions: '1920 × 1080',
-    aspectRatio: '16:9',
-    codec: 'MP4 · H.264 · AAC',
-    backendSupported: false,
-  },
-  {
-    id: 'vk_clips_v1',
-    platform: 'VK Клипы',
-    contentType: 'Клипы',
-    title: 'VK Клипы',
-    dimensions: '1080 × 1920',
-    aspectRatio: '9:16',
-    codec: 'MP4 · H.264 · AAC',
-    backendSupported: false,
+    codec: 'MP4, H.264, AAC',
   },
 ];
 
@@ -150,7 +96,6 @@ const STATUS_LABELS: Record<string, string> = {
   failed: 'Ошибка',
   cancelling: 'Отмена',
   cancelled: 'Отменено',
-  unavailable: 'Не подключён',
 };
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -228,7 +173,7 @@ function FileDropzone({
       <div className="dz-sub">
         {file
           ? 'Нажмите, чтобы заменить файл'
-          : 'или нажмите, чтобы выбрать · MP4, MOV, WebM · до 2 ГБ'}
+          : 'или нажмите, чтобы выбрать, MP4, MOV, WebM, до 2 ГБ'}
       </div>
     </div>
   );
@@ -262,7 +207,7 @@ function SourcePanel({
     <section className="panel">
       <div className="panel-head">
         <h3>1. Исходное видео</h3>
-        <span className="muted-sm">MP4 · MOV · WebM</span>
+        <span className="muted-sm">MP4, MOV, WebM</span>
       </div>
       {!file ? (
         <FileDropzone file={file} onFile={onFile} disabled={disabled} />
@@ -317,8 +262,7 @@ function SourcePanel({
 function TaskRow({ task }: { task: TaskView }) {
   const isReady = task.status === 'ready' || task.status === 'completed';
   const isFailed = task.status === 'failed';
-  const isUnavailable = task.status === 'unavailable';
-  const tone = isReady ? 'pill-ok' : isFailed ? 'pill-err' : task.status === 'queued' || isUnavailable ? '' : 'pill-run';
+  const tone = isReady ? 'pill-ok' : isFailed ? 'pill-err' : task.status === 'queued' ? '' : 'pill-run';
   const progress = Math.max(0, Math.min(100, task.progress));
 
   return (
@@ -329,7 +273,7 @@ function TaskRow({ task }: { task: TaskView }) {
           <span title={task.name}>{task.name}</span>
           <span className={`pill ${tone}`}>{STATUS_LABELS[task.status] || task.status}</span>
         </div>
-        <div className="proj-meta">{task.kind} · {task.message || `Задача ${task.id.slice(0, 8)}`}</div>
+        <div className="proj-meta">{task.kind}, {task.message || `Задача ${task.id.slice(0, 8)}`}</div>
         {task.status === 'ready' && !task.downloadUrl && (
           <div className="task-result-message">
             Экспорт завершён. Ссылка на скачивание пока недоступна.
@@ -353,7 +297,6 @@ function TaskRow({ task }: { task: TaskView }) {
 
 export default function App() {
   const { user, isLoading, login, register, logout, getPlan, updateProfile } = useAuth();
-  const { projects: sampleProjects } = useProjects();
   const [view, setView] = useState<View>('landing');
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [file, setFile] = useState<File | null>(null);
@@ -390,7 +333,7 @@ export default function App() {
       const sourceVideo = video ?? await uploadVideo(file);
       setVideo(sourceVideo);
 
-      const steps = [];
+      const steps: Array<{ type: 'upscale' | 'interpolate'; parameters: Record<string, number> }> = [];
       if (scale > 1) steps.push({ type: 'upscale', parameters: { scale: Number(scale) } });
       if (fps > 0) steps.push({ type: 'interpolate', parameters: { target_fps: Number(fps) } });
 
@@ -414,30 +357,14 @@ export default function App() {
       const sourceVideo = video ?? await uploadVideo(file);
       setVideo(sourceVideo);
       const outcomes = await Promise.allSettled(selectedProfiles.map(async (profile): Promise<ExportTask> => {
-        if (!profile.backendSupported) {
-          return {
-            id: `local-${profile.id}-${Date.now()}`,
-            video_id: sourceVideo.id,
-            profile_id: profile.id,
-            adaptation_mode: adaptationMode,
-            status: 'unavailable',
-            progress: 0,
-            output_path: null,
-            error_code: 'PROFILE_NOT_CONFIGURED',
-            user_message: 'Профиль пока не подключён к обработке',
-            created_at: new Date().toISOString(),
-            source: 'local',
-          };
-        }
-
-        return { ...await createVideoExport(sourceVideo.id, profile.id, adaptationMode), source: 'backend' };
+        return createVideoExport(sourceVideo.id, profile.id, adaptationMode);
       }));
       const created = outcomes.flatMap((outcome) => outcome.status === 'fulfilled' ? [outcome.value] : []);
       const failures = outcomes.filter((outcome) => outcome.status === 'rejected');
       setExportJobs((current) => [...current, ...created]);
 
       const hasActiveExports = created.some((task) =>
-        task.source === 'backend' && !['ready', 'failed', 'cancelled', 'unavailable'].includes(task.status));
+        !['ready', 'failed', 'cancelled'].includes(task.status));
       setProcessing(hasActiveExports);
       if (failures.length) {
         const firstFailure = failures[0];
@@ -455,7 +382,7 @@ export default function App() {
   };
 
   const pendingExportIds = exportJobs
-    .filter((task) => task.source === 'backend' && !['ready', 'failed', 'cancelled', 'unavailable'].includes(task.status))
+    .filter((task) => !['ready', 'failed', 'cancelled'].includes(task.status))
     .map((task) => task.id)
     .join('|');
 
@@ -470,7 +397,7 @@ export default function App() {
       try {
         setJob(await getJobStatus(job.id));
       } catch (pollError) {
-        console.error(pollError);
+        setError(getErrorMessage(pollError, 'Не удалось обновить состояние обработки'));
       }
     }, 2000);
     return () => window.clearInterval(interval);
@@ -486,12 +413,12 @@ export default function App() {
         try {
           updates.set(id, await getVideoExport(id));
         } catch (pollError) {
-          console.error(pollError);
+          setError(getErrorMessage(pollError, 'Не удалось обновить состояние экспорта'));
         }
       }));
       setExportJobs((current) => current.map((task) => {
         const updated = updates.get(task.id);
-        return updated ? { ...updated, source: task.source } : task;
+        return updated || task;
       }));
     }, 2000);
     return () => window.clearInterval(interval);
@@ -499,7 +426,7 @@ export default function App() {
 
   useEffect(() => {
     const exportsAreDone = exportJobs.length > 0
-      && exportJobs.every((task) => ['ready', 'failed', 'cancelled', 'unavailable'].includes(task.status));
+      && exportJobs.every((task) => ['ready', 'failed', 'cancelled'].includes(task.status));
     const jobIsDone = !job || ['completed', 'failed', 'cancelled'].includes(job.status);
     if (exportsAreDone && jobIsDone) setProcessing(false);
   }, [exportJobs, job]);
@@ -536,6 +463,9 @@ export default function App() {
         status: exportJob.status,
         progress: exportJob.progress,
         message: exportJob.user_message || exportJob.error_code || undefined,
+        downloadUrl: exportJob.status === 'ready'
+          ? resolveApiUrl(`exports/${exportJob.id}/download`)
+          : undefined,
         createdAt: exportJob.created_at,
       });
     });
@@ -543,10 +473,6 @@ export default function App() {
   }, [exportJobs, file?.name, job, result]);
 
   const projectsForUi = useMemo(() => {
-    if (!tasks.length) {
-      return sampleProjects;
-    }
-
     return tasks.map((task, index) => ({
       id: task.id,
       name: task.name,
@@ -554,17 +480,15 @@ export default function App() {
         ? 'done'
         : task.status === 'failed'
           ? 'err'
-          : task.status === 'unavailable'
-            ? 'unavailable'
           : task.status === 'queued'
             ? 'queue'
             : 'run',
       progress: task.progress,
-      meta: `${task.kind}${task.message ? ` · ${task.message}` : ''}`,
+      meta: `${task.kind}${task.message ? `, ${task.message}` : ''}`,
       hue: 205 + index * 24,
       downloadUrl: task.downloadUrl,
     }));
-  }, [sampleProjects, tasks]);
+  }, [tasks]);
 
   const handleQuickFile = (selectedFile: File) => {
     handleFile(selectedFile);
@@ -645,7 +569,7 @@ export default function App() {
             onClick={() => setProfileOrientation('16:9')}
             disabled={processing}
           >
-            Альбомная · 16:9
+            Альбомная, 16:9
           </button>
           <button
             type="button"
@@ -653,7 +577,7 @@ export default function App() {
             onClick={() => setProfileOrientation('9:16')}
             disabled={processing}
           >
-            Книжная · 9:16
+            Книжная, 9:16
           </button>
         </div>
         <p className="format-help">
@@ -679,7 +603,7 @@ export default function App() {
               />
               <b>{profile.platform}</b>
               <span>{profile.contentType}</span>
-              <span>{profile.dimensions} · {profile.aspectRatio}</span>
+              <span>{profile.dimensions}, {profile.aspectRatio}</span>
             </label>
           ))}
         </div>
@@ -717,7 +641,7 @@ export default function App() {
         <div className="panel-foot">
           <div className="estimate">
             {selectedProfiles.length
-              ? selectedProfiles.map((profile) => `${profile.title} · ${profile.dimensions} · ${profile.codec}`).join(' / ')
+              ? selectedProfiles.map((profile) => `${profile.title}, ${profile.dimensions}, ${profile.codec}`).join(', ')
               : 'Выберите профиль экспорта'}
           </div>
           <button
@@ -725,12 +649,12 @@ export default function App() {
             onClick={handleExportSubmit}
             disabled={!file || processing}
           >
-            {processing ? 'Экспорт…' : `Запустить экспорт${selectedProfiles.length > 1 ? ` · ${selectedProfiles.length}` : ''}`}
+            {processing ? 'Экспорт…' : `Запустить экспорт${selectedProfiles.length > 1 ? `, ${selectedProfiles.length}` : ''}`}
           </button>
         </div>
         {exportJobs.length > 0 && (
           <div className="status-detail">
-            Экспортов в текущей сессии: {exportJobs.length} · Каждая задача обрабатывается отдельно.
+            Экспортов в текущей сессии: {exportJobs.length}, каждая задача обрабатывается отдельно.
           </div>
         )}
       </section>
@@ -748,7 +672,7 @@ export default function App() {
       />
       {tasks.length > 0 && (
         <section className="panel">
-          <div className="panel-head"><h3>Статусы из backend</h3></div>
+          <div className="panel-head"><h3>Текущие задачи</h3></div>
           {renderTaskList(tasks.slice(0, 4))}
         </section>
       )}
@@ -760,7 +684,7 @@ export default function App() {
       <Projects projects={projectsForUi} />
       {tasks.length > 0 && (
         <section className="panel">
-          <div className="panel-head"><h3>Текущая сессия</h3></div>
+          <div className="panel-head"><h3>Текущие задачи</h3></div>
           {renderTaskList(tasks)}
         </section>
       )}

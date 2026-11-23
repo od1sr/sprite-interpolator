@@ -22,7 +22,7 @@ export default function NewProcess({
   const getEstimate = () => {
     const upLabel = scale === 1 ? 'без апскейла' : `апскейл ${scale}×`;
     const fpsLabel = fps === 0 ? 'исходный FPS' : `${fps} FPS`;
-    return `В запрос уйдёт: ${upLabel} · ${fpsLabel}`;
+    return `В запрос уйдёт: ${upLabel}, ${fpsLabel}`;
   };
 
   return (
@@ -38,7 +38,7 @@ export default function NewProcess({
       <div className="panel">
         <div className="panel-head">
           <h3>1. Видео</h3>
-          <span className="muted-sm">MP4 · MOV · WebM · до 2 ГБ</span>
+          <span className="muted-sm">MP4, MOV, WebM, до 2 ГБ</span>
         </div>
         <Dropzone
           title={file?.name || 'Перетащите видео сюда'}
@@ -49,17 +49,17 @@ export default function NewProcess({
         {file && (
           <div className="file-summary" style={{ marginTop: 14 }}>
             <strong>{file.name}</strong>
-            <span>·</span>
+            <span>,</span>
             <span>{formatBytes(file.size)}</span>
             {video?.width && video?.height && (
               <>
-                <span>·</span>
+                <span>,</span>
                 <span>{video.width} × {video.height}</span>
               </>
             )}
             {video?.fps && (
               <>
-                <span>·</span>
+                <span>,</span>
                 <span>{video.fps} FPS</span>
               </>
             )}

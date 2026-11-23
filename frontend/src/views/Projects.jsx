@@ -10,10 +10,10 @@ export default function Projects({ projects }) {
 
   const tabs = [
     { id: 'all', label: 'Все' },
+    { id: 'queue', label: 'В очереди' },
     { id: 'run', label: 'В обработке' },
     { id: 'done', label: 'Готово' },
     { id: 'err', label: 'Ошибка' },
-    { id: 'unavailable', label: 'Не подключён' },
   ];
 
   return (

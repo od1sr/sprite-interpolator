@@ -5,13 +5,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
-
+from app.exporter import run_ffmpeg_export
 import httpx
 from sqlalchemy import select
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models import Job, Result, Video
+from app.models import ExportJob, Job, Result, Video
 from app.queue import celery_app
 
 logger = logging.getLogger(__name__)
@@ -300,3 +300,49 @@ def process_job(_: Any, job_id: str) -> None:
                     steps[current.current_step]["finished_at"] = _now().isoformat().replace("+00:00", "Z")
                     steps[current.current_step]["error"] = error
                     current.steps = steps
+
+
+@celery_app.task(name="app.worker.process_export_job", bind=True)
+def process_export_job(_: Any, export_job_id: str) -> None:
+    parsed_id = UUID(export_job_id)
+
+    with SessionLocal() as session:
+        job = session.get(ExportJob, parsed_id)
+        if not job or job.status != "queued":
+            return
+        video = session.get(Video, job.video_id)
+        if not video:
+            job.status = "failed"
+            job.user_message = "Исходное видео не найдено"
+            session.commit()
+            return
+
+        job.status = "analyzing"
+        job.started_at = _now()
+        session.commit()
+
+        input_path = settings.storage_root / video.storage_key
+        output_dir = settings.storage_root / "exports" / str(job.id)
+        output_path = output_dir / "result.mp4"
+
+        try:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            job.status = "processing"
+            session.commit()
+            run_ffmpeg_export(input_path, output_path, job.config_snapshot, job.adaptation_mode)
+            if not output_path.is_file() or output_path.stat().st_size == 0:
+                raise RuntimeError("FFmpeg не создал файл результата")
+
+            job.status = "ready"
+            job.progress = 100
+            job.output_path = f"exports/{job.id}/result.mp4"
+            job.finished_at = _now()
+            session.commit()
+
+        except Exception:
+            logger.exception("Ошибка экспорта %s", job.id)
+            job.status = "failed"
+            job.error_code = "FFMPEG_ERROR"
+            job.user_message = "Не удалось обработать видео"
+            job.finished_at = _now()
+            session.commit()

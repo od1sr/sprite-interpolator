@@ -81,7 +81,7 @@ export default function Landing({ onAuthClick }) {
                   </div>
                   <h3>Апскейл</h3>
                   <p>Нейросетевой апскейл до 4K и 8K с восстановлением мелких деталей и текстур.</p>
-                  <span className="tag">4K · 8K</span>
+                  <span className="tag">4K, 8K</span>
                 </div>
 
                 <div className="card">

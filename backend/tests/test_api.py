@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import select
 
-from app.models import Job, Result, Video
+from app.models import ExportJob, Job, Result, Video
 
 
 def upload(client, monkeypatch):
@@ -312,3 +312,86 @@ def test_missing_resources_and_invalid_uuid_use_error_envelope(client):
     missing_job = test_client.get(f"/api/v1/jobs/{uuid4()}")
     assert missing_job.status_code == 404
     assert missing_job.json()["error"]["code"] == "RESOURCE_NOT_FOUND"
+
+
+def test_create_export_enqueues_and_returns_backend_status(client, monkeypatch):
+    test_client, _ = client
+    video_id = upload(test_client, monkeypatch).json()["id"]
+    from app import api
+
+    enqueued = []
+    monkeypatch.setattr(api.process_export_job, "apply_async", lambda args: enqueued.append(args))
+    response = test_client.post(
+        f"/api/v1/videos/{video_id}/exports",
+        json={"profile_id": "tiktok_vertical_v1", "adaptation_mode": "pad"},
+    )
+
+    assert response.status_code == 202
+    export = response.json()
+    assert export["status"] == "queued"
+    assert export["profile_id"] == "tiktok_vertical_v1"
+    assert enqueued == [[export["id"]]]
+    polled = test_client.get(f"/api/v1/exports/{export['id']}")
+    assert polled.status_code == 200
+    assert polled.json()["id"] == export["id"]
+
+
+def test_export_queue_failure_does_not_leave_a_queued_record(client, monkeypatch):
+    test_client, sessions = client
+    video_id = upload(test_client, monkeypatch).json()["id"]
+    from app import api
+
+    def fail_enqueue(*_, **__):
+        raise ConnectionError("broker unavailable")
+
+    monkeypatch.setattr(api.process_export_job, "apply_async", fail_enqueue)
+    response = test_client.post(
+        f"/api/v1/videos/{video_id}/exports",
+        json={"profile_id": "tiktok_vertical_v1", "adaptation_mode": "crop"},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "SERVICE_UNAVAILABLE"
+    with sessions() as session:
+        assert session.scalar(select(ExportJob)) is None
+
+
+def test_export_download_requires_ready_job_and_serves_output(client):
+    test_client, sessions = client
+    from app import api
+
+    output_key = "exports/test/result.mp4"
+    with sessions.begin() as session:
+        video = Video(
+            filename="source.mp4",
+            content_type="video/mp4",
+            size_bytes=10,
+            storage_key="uploads/source.mp4",
+        )
+        session.add(video)
+        session.flush()
+        export = ExportJob(
+            video_id=video.id,
+            profile_id="youtube_standard_v1",
+            config_snapshot={},
+            adaptation_mode="pad",
+            status="queued",
+        )
+        session.add(export)
+        session.flush()
+        export_id = export.id
+
+    not_ready = test_client.get(f"/api/v1/exports/{export_id}/download")
+    assert not_ready.status_code == 409
+
+    output_path = api.settings.storage_root / output_key
+    output_path.parent.mkdir(parents=True)
+    output_path.write_bytes(b"rendered")
+    with sessions.begin() as session:
+        export = session.get(ExportJob, export_id)
+        export.status = "ready"
+        export.output_path = output_key
+
+    downloaded = test_client.get(f"/api/v1/exports/{export_id}/download")
+    assert downloaded.status_code == 200
+    assert downloaded.content == b"rendered"

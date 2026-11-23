@@ -68,6 +68,13 @@ class StepInput(BaseModel):
                 or target_fps <= 0
             ):
                 raise ValueError("target_fps должен быть положительным конечным числом")
+        elif step_type == "format":
+            if set(parameters) != {"platform", "resolution"}:
+                raise ValueError("Для format требуются параметры platform и resolution")
+            if parameters["platform"] not in ["youtube", "tiktok", "vk"]:
+                raise ValueError("Платформа должна быть youtube, tiktok или vk")
+            if not isinstance(parameters["resolution"], str):
+                raise ValueError("resolution должен быть строкой")
         return parameters
 
 
@@ -112,4 +119,21 @@ class ResultResponse(APIModel):
     height: int | None
     fps: float | None
     download_url: str
+    created_at: datetime
+
+class ExportJobCreate(BaseModel):
+    profile_id: str
+    adaptation_mode: Literal["crop", "pad", "blur"]
+    fps_override: Literal["source"] | int | None = "source"
+
+class ExportJobResponse(APIModel):
+    id: UUID
+    video_id: UUID
+    profile_id: str
+    adaptation_mode: str
+    status: str
+    progress: float
+    output_path: str | None
+    error_code: str | None
+    user_message: str | None
     created_at: datetime

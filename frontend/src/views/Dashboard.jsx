@@ -6,6 +6,9 @@ export default function Dashboard({ user, projects, onAddProject, onNewProcess }
   const firstName = user?.name?.split(' ')[0] || 'Пользователь';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Доброе утро' : hour < 18 ? 'Добрый день' : 'Добрый вечер';
+  const activeCount = projects.filter(project => project.status === 'run' || project.status === 'queue').length;
+  const completedCount = projects.filter(project => project.status === 'done').length;
+  const failedCount = projects.filter(project => project.status === 'err').length;
 
   return (
     <div id="view-dashboard">
@@ -19,14 +22,14 @@ export default function Dashboard({ user, projects, onAddProject, onNewProcess }
       </div>
 
       <div className="stats">
-        <div className="stat"><div className="stat-label">Всего проектов</div><div className="stat-val">128</div><div className="stat-sub up">+12 за неделю</div></div>
-        <div className="stat"><div className="stat-label">В обработке</div><div className="stat-val">{projects.filter(p => p.status === 'run').length}</div></div>
-        <div className="stat"><div className="stat-label">Минут обработано</div><div className="stat-val">1 482</div></div>
-        <div className="stat"><div className="stat-label">Остаток квоты</div><div className="stat-val">64%</div></div>
+        <div className="stat"><div className="stat-label">Обработок в этой сессии</div><div className="stat-val">{projects.length}</div></div>
+        <div className="stat"><div className="stat-label">В обработке</div><div className="stat-val">{activeCount}</div></div>
+        <div className="stat"><div className="stat-label">Завершено</div><div className="stat-val">{completedCount}</div></div>
+        <div className="stat"><div className="stat-label">С ошибкой</div><div className="stat-val">{failedCount}</div></div>
       </div>
 
       <div className="panel">
-        <div className="panel-head"><h3>Быстрая обработка</h3><span className="muted-sm">MP4 · MOV · WebM · до 2 ГБ</span></div>
+        <div className="panel-head"><h3>Быстрая обработка</h3><span className="muted-sm">MP4, MOV, WebM, до 2 ГБ</span></div>
         <Dropzone
           title="Перетащите видео сюда"
           sub="Выбор файла откроет форму обработки"

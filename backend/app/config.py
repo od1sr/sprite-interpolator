@@ -33,3 +33,42 @@ class Settings:
 
 
 settings = Settings()
+
+# app/config.py
+
+EXPORT_PROFILES = {
+    "tiktok_vertical_v1": {
+        "profile_id": "tiktok_vertical_v1",
+        "platform": "tiktok",
+        "content_type": "vertical",
+        "version": 1,
+        "container": "mp4",
+        "video_codec": "libx264",
+        "audio_codec": "aac",
+        "width": 1080,
+        "height": 1920,
+        "aspect_ratio": "9:16",
+        "fps_mode": "source",
+        "quality_mode": "crf",
+        "crf": 23,
+        "audio_bitrate": "128k",
+        "allowed_modes": ["crop", "pad", "blur"]
+    },
+    "youtube_standard_v1": {
+        "profile_id": "youtube_standard_v1",
+        "platform": "youtube",
+        "content_type": "standard",
+        "version": 1,
+        "container": "mp4",
+        "video_codec": "libx264",
+        "audio_codec": "aac",
+        "width": 1920,
+        "height": 1080,
+        "aspect_ratio": "16:9",
+        "fps_mode": "source",
+        "quality_mode": "crf",
+        "crf": 18,
+        "audio_bitrate": "192k",
+        "allowed_modes": ["crop", "pad", "blur"]
+    }
+}

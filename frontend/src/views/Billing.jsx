@@ -33,7 +33,7 @@ export default function Billing({ currentPlan, onPlanChange }) {
             <div className="muted-sm">
               {currentPlan.quota 
                 ? `${currentPlan.used} из ${currentPlan.quota} обработок в этом месяце` 
-                : `${currentPlan.used} обработок · без ограничений`}
+                : `${currentPlan.used} обработок, без ограничений`}
             </div>
             <div className="bar"><i style={{width: `${usagePercent}%`}}></i></div>
           </div>

@@ -3,8 +3,7 @@
 
 export type JobStatus = 'queued' | 'processing' | 'completed' | 'failed' | 'cancelling' | 'cancelled';
 
-
-export type StepType = 'upscale' | 'interpolate' | 'restore' | 'format';
+export type StepType = 'upscale' | 'interpolate';
 
 
 export interface Video {
@@ -13,10 +12,10 @@ export interface Video {
   content_type: string;
   size_bytes: number;
   duration_seconds: number | null;
-  width: number;
-  height: number;
-  fps: number;
-  codec: string;
+  width: number | null;
+  height: number | null;
+  fps: number | null;
+  codec: string | null;
   created_at: string;
 }
 
@@ -33,11 +32,11 @@ export interface JobError {
 export interface PipelineStep {
   type: StepType;
   status: 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
-  parameters: Record<string, any>;
+  parameters: Record<string, number>;
   progress?: number;
   error?: JobError | null;
-  created_at: string;
-  updated_at: string;
+  started_at: string | null;
+  finished_at: string | null;
 }
 
 
@@ -52,7 +51,6 @@ export interface Job {
   result_id: string | null;
   error: JobError | null;
   created_at: string;
-  updated_at: string;
   started_at: string | null;  
   finished_at: string | null;  
 }
