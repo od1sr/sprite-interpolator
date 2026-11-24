@@ -83,7 +83,7 @@ img{max-width:100%}
 }
 .brand{
   display:flex;align-items:center;gap:10px;
-  font-family:'Permanent Marker',var(--marker);font-weight:700;
+  font-family:'Permanent Marker',var(--marker);font-weight:400;
   font-size:19px;letter-spacing:.01em;line-height:1;
 }
 .brand-mark{
