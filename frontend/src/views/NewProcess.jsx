@@ -34,15 +34,6 @@ export default function NewProcess({
 }) {
   const selectedProfiles = exportProfiles.filter((profile) => selectedProfileIds.includes(profile.id));
 
-  const getEstimate = () => {
-    const upLabel = scale === 1 ? 'без апскейла' : `апскейл ${scale}×`;
-    const fpsLabel = fps === 0 ? 'исходный FPS' : `${fps} FPS`;
-    const exportLabel = selectedProfiles.length
-      ? `, экспорт: ${selectedProfiles.length}`
-      : ', без экспорта';
-    return `В запрос уйдёт: ${upLabel}, ${fpsLabel}${exportLabel}`;
-  };
-
   const setProfileOrientation = (aspectRatio) => {
     setProfileIds(exportProfiles
       .filter((profile) => profile.aspectRatio === aspectRatio)
@@ -114,12 +105,6 @@ export default function NewProcess({
                 <strong>{video.codec}</strong>
               </div>
             )}
-            {video?.content_type && (
-              <div className="file-meta-item">
-                <span>Формат</span>
-                <strong>{video.content_type}</strong>
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -162,16 +147,6 @@ export default function NewProcess({
           </div>
         </div>
 
-        <div className="panel-foot">
-          <div className="estimate">{getEstimate()}</div>
-          <button
-            className="btn btn-primary"
-            onClick={onStart}
-            disabled={!file || !video || uploading || !hasPipelineSteps || processing}
-          >
-            {uploading ? 'Загрузка…' : processing ? 'Обработка…' : 'Запустить обработку'}
-          </button>
-        </div>
         {!hasPipelineSteps && <div className="notice">Выберите хотя бы один рабочий этап обработки.</div>}
       </div>
 
@@ -253,18 +228,21 @@ export default function NewProcess({
           </div>
         )}
 
-        <div className="panel-foot">
-          <div className="estimate">
-            {selectedProfiles.length
-              ? selectedProfiles.map((profile) => `${profile.title}, ${profile.dimensions}, ${profile.codec}`).join(', ')
-              : 'Профили экспорта не выбраны'}
-          </div>
-        </div>
         {exportJobsCount > 0 && (
           <div className="status-detail">
             Экспортов в текущей сессии: {exportJobsCount}, каждая задача обрабатывается отдельно.
           </div>
         )}
+
+        <div className="panel-foot start-foot">
+          <button
+            className="btn btn-primary"
+            onClick={onStart}
+            disabled={!file || !video || uploading || !hasPipelineSteps || processing}
+          >
+            {uploading ? 'Загрузка…' : processing ? 'Обработка…' : 'Запустить обработку'}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -537,6 +537,7 @@ img{max-width:100%}
   margin-top:18px;padding-top:18px;border-top:1px solid var(--line);flex-wrap:wrap;
 }
 .estimate{font-size:13px;color:var(--muted)}
+.start-foot{justify-content:flex-end}
 
 /* ============ SETTINGS ============ */
 .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
