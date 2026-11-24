@@ -11,7 +11,6 @@ export default function Sidebar({ currentView, setView, user, getPlan, onLogout 
     { id: 'projects', label: 'Проекты', icon: 'M3 7.5A2 2 0 0 1 5 5.5h4l2 2.2h8a2 2 0 0 1 2 2v8.8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7.5Z' },
     { id: 'settings', label: 'Настройки', icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z' }, // Упрощенная иконка
     { id: 'billing', label: 'Тариф и оплата', icon: 'M2.5 5.5h19v13H2.5zM2.5 10h19' },
-    { id: 'admin', label: 'Админ-панель', icon: 'M12 3l7.5 3.2v5.6c0 4.6-3.1 8.2-7.5 9.2-4.4-1-7.5-4.6-7.5-9.2V6.2L12 3Z' },
   ];
 
   return (

@@ -412,8 +412,6 @@ img{max-width:100%}
 }
 .stat-label{font-size:12.5px;color:var(--muted);margin-bottom:10px}
 .stat-val{font-size:26px;font-weight:600;letter-spacing:-.035em;line-height:1}
-.stat-sub{font-size:12px;color:#98A2B3;margin-top:8px}
-.stat-sub.up{color:var(--ok)}
 
 /* ============ PANELS ============ */
 .panel{
@@ -589,23 +587,6 @@ th{
 td{padding:13px 12px;border-top:1px solid var(--line);vertical-align:middle;white-space:nowrap}
 tbody tr{transition:background .14s}
 tbody tr:hover{background:rgba(15,23,42,.025)}
-.cell-user{display:flex;align-items:center;gap:11px}
-.cell-user b{font-weight:500;font-size:13.8px}
-.cell-user span{display:block;font-size:12px;color:var(--muted);font-weight:400}
-
-/* ============ ADMIN METRICS ============ */
-.admin-grid{display:grid;grid-template-columns:1.55fr 1fr;gap:16px;align-items:start}
-.metric{margin-bottom:18px}
-.metric:last-child{margin-bottom:0}
-.metric-top{display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px}
-.metric-top span{color:var(--muted)}
-.metric-top b{font-weight:500;font-variant-numeric:tabular-nums}
-.log{display:flex;gap:12px;padding:11px 0;border-top:1px solid var(--line);font-size:13px}
-.log:first-of-type{border-top:none}
-.log-time{color:#98A2B3;font-size:12px;flex:0 0 46px;font-variant-numeric:tabular-nums;padding-top:1px}
-.log-text{color:var(--muted);line-height:1.5}
-.log-text b{color:var(--text);font-weight:500}
-
 /* ============ TOAST ============ */
 .toast-wrap{
   position:fixed;bottom:24px;right:24px;z-index:200;
@@ -624,9 +605,6 @@ tbody tr:hover{background:rgba(15,23,42,.025)}
 @keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
 /* ============ RESPONSIVE ============ */
-@media (max-width:980px){
-  .admin-grid{grid-template-columns:1fr}
-}
 @media (max-width:880px){
   .nav-links{display:none}
   .hero{padding:68px 0 56px}

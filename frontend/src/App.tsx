@@ -16,13 +16,12 @@ import Auth from './views/Auth';
 import Billing from './views/Billing';
 import Dashboard from './views/Dashboard';
 import Landing from './views/Landing';
-import Admin from './views/Admin';
 import NewProcess from './views/NewProcess';
 import Projects from './views/Projects';
 import Settings from './views/Settings';
 import './App.css';
 
-type View = 'landing' | 'auth' | 'dashboard' | 'new' | 'adapt' | 'projects' | 'settings' | 'billing' | 'admin';
+type View = 'landing' | 'auth' | 'dashboard' | 'new' | 'adapt' | 'projects' | 'settings' | 'billing';
 
 interface ExportProfile {
   id: string;
@@ -92,7 +91,6 @@ const VIEW_TITLES: Record<View, string> = {
   projects: 'Проекты',
   settings: 'Настройки аккаунта',
   billing: 'Тариф и оплата',
-  admin: 'Админ-панель',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -783,8 +781,6 @@ export default function App() {
         return <Settings user={user} onUpdateProfile={updateProfile} />;
       case 'billing':
         return <Billing currentPlan={getPlan()} onPlanChange={(plan: string) => updateProfile({ plan })} />;
-      case 'admin':
-        return <Admin />;
       default:
         return renderDashboard();
     }
