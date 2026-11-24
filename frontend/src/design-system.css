@@ -87,12 +87,8 @@ img{max-width:100%}
   font-size:19px;letter-spacing:.01em;line-height:1;
 }
 .brand-mark{
-  width:20px;height:20px;border-radius:6px;background:var(--accent);
-  position:relative;flex:0 0 auto;
-}
-.brand-mark::after{
-  content:'';position:absolute;inset:5px;background:var(--bg);border-radius:1px;
-  clip-path:polygon(0 0,100% 50%,0 100%);
+  width:32px;height:32px;flex:0 0 auto;
+  background:url('/logo.png') center / contain no-repeat;
 }
 .nav-links{display:flex;gap:28px;font-size:14px;color:var(--muted)}
 .nav-links a{transition:color .16s}
