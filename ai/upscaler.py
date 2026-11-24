@@ -8,6 +8,7 @@ from basicsr.archs.rrdbnet_arch import RRDBNet
 from realesrgan import RealESRGANer
 from typing import Optional
 
+from audio import finalize_video
 from progress import clear_progress, write_progress
 
 logger = logging.getLogger("ai.upscaler")
@@ -75,9 +76,14 @@ class VideoUpscaler:
         out_width = width * self.scale
         out_height = height * self.scale
 
-        # Настройка VideoWriter
+        # VideoWriter пишет только кадры, поэтому сначала сохраняем "немое"
+        # видео во временный файл, а затем добавляем звук через FFmpeg.
+        output = Path(output_path)
+        silent_path = output.with_name(f".{output.stem}.silent{output.suffix}")
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # или 'avc1' для H.264
-        out = cv2.VideoWriter(output_path, fourcc, fps, (out_width, out_height))
+        out = cv2.VideoWriter(str(silent_path), fourcc, fps, (out_width, out_height))
+        if not out.isOpened():
+            raise IOError(f"Не удалось открыть выходное видео: {silent_path}")
 
         processed_frames = 0
         report_every = max(1, total_frames // 100)
@@ -106,7 +112,9 @@ class VideoUpscaler:
         finally:
             cap.release()
             out.release()
-            clear_progress(output_path)
+
+        audio_added = finalize_video(input_path, silent_path, output)
+        clear_progress(output_path)
 
         # Собираем метаданные результата
         result = {
@@ -116,6 +124,7 @@ class VideoUpscaler:
             "height": out_height,
             "fps": fps,
             "duration_seconds": total_frames / fps if fps > 0 else 0,
-            "size_bytes": Path(output_path).stat().st_size if Path(output_path).exists() else 0,
+            "size_bytes": output.stat().st_size if output.exists() else 0,
+            "audio_preserved": audio_added,
         }
         return result

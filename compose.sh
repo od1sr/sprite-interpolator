@@ -8,8 +8,13 @@ if [[ ! -f .env ]]; then
   echo 'Created .env from .env.example'
 fi
 
+compose_files=(-f compose.yaml)
+if command -v nvidia-smi >/dev/null 2>&1 && [[ -f compose.gpu.yaml ]]; then
+  compose_files+=(-f compose.gpu.yaml)
+fi
+
 if [[ $# -eq 0 ]]; then
   set -- up --build
 fi
 
-exec docker compose "$@"
+exec docker compose "${compose_files[@]}" "$@"

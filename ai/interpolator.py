@@ -15,6 +15,7 @@ if not RIFE_DIR.exists():
 sys.path.insert(0, str(RIFE_DIR))
 
 import interpolation_model as rife_model
+from audio import finalize_video
 from progress import clear_progress, write_progress
 
 logger = logging.getLogger("ai.interpolator")
@@ -130,20 +131,26 @@ class VideoInterpolator:
         n_mid = (1 << level) - 1
         actual_fps = source_fps * factor
 
+        # VideoWriter is silent: write frames to a temporary file, then add the
+        # source audio back with FFmpeg.
+        output = Path(output_path)
+        silent_path = output.with_name(f".{output.stem}.silent{output.suffix}")
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+
         # Edge case: single-frame video
         if total_frames < 2:
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(output_path, fourcc, actual_fps, (width, height))
+            out = cv2.VideoWriter(str(silent_path), fourcc, actual_fps, (width, height))
             ret, frame = cap.read()
             if ret:
                 out.write(frame)
             cap.release()
             out.release()
+            audio_added = finalize_video(input_path, silent_path, output)
             return self._result(output_path, width, height, actual_fps,
-                                total_frames / source_fps, source_fps, factor, n_mid)
+                                total_frames / source_fps, source_fps, factor, n_mid,
+                                audio_added)
 
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(output_path, fourcc, actual_fps, (width, height))
+        out = cv2.VideoWriter(str(silent_path), fourcc, actual_fps, (width, height))
 
         ret, prev = cap.read()
         if not ret:
@@ -174,13 +181,16 @@ class VideoInterpolator:
         finally:
             cap.release()
             out.release()
-            clear_progress(output_path)
+
+        audio_added = finalize_video(input_path, silent_path, output)
+        clear_progress(output_path)
 
         return self._result(output_path, width, height, actual_fps,
-                            total_frames / source_fps, source_fps, factor, n_mid)
+                            total_frames / source_fps, source_fps, factor, n_mid,
+                            audio_added)
 
     @staticmethod
-    def _result(path, w, h, fps, dur, src_fps, factor, n_mid) -> dict:
+    def _result(path, w, h, fps, dur, src_fps, factor, n_mid, audio_preserved=False) -> dict:
         return {
             "status": "completed",
             "output_uri": path,
@@ -189,6 +199,7 @@ class VideoInterpolator:
             "fps": fps,
             "duration_seconds": dur,
             "size_bytes": Path(path).stat().st_size if Path(path).exists() else 0,
+            "audio_preserved": audio_preserved,
             "source_fps": src_fps,
             "factor": factor,
             "n_interpolated_per_pair": n_mid,

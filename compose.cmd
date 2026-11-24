@@ -7,10 +7,17 @@ if not exist .env (
     echo Created .env from .env.example
 )
 
+rem Pass the GPU override automatically when an NVIDIA GPU is available.
+set "COMPOSE_FILES=-f compose.yaml"
+where nvidia-smi >nul 2>&1
+if not errorlevel 1 (
+    if exist compose.gpu.yaml set "COMPOSE_FILES=%COMPOSE_FILES% -f compose.gpu.yaml"
+)
+
 if "%~1"=="" (
-    docker compose up --build
+    docker compose %COMPOSE_FILES% up --build
 ) else (
-    docker compose %*
+    docker compose %COMPOSE_FILES% %*
 )
 
 exit /b %ERRORLEVEL%

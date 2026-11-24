@@ -39,6 +39,12 @@ RUN --mount=type=cache,id=ai-downloads,target=/tmp/ai-downloads \
     && /usr/local/bin/patch-basicsr \
     && rm -rf /tmp/BasicSR-src
 
+# FFmpeg/ffprobe are used to put the source audio track back into processed
+# videos. Kept in a separate layer so the heavy dependency layers stay cached.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY ai/ ./
 
 EXPOSE 8001

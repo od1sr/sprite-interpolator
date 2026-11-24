@@ -1,0 +1,5 @@
+# GPU override for the AI service. Applied automatically by compose.cmd /
+# compose.sh when an NVIDIA GPU is detected on the host.
+services:
+  ai:
+    gpus: all
