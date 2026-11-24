@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createJob,
   createVideoExport,
@@ -236,30 +236,49 @@ export default function App() {
   const [profileIds, setProfileIds] = useState<string[]>([EXPORT_PROFILES[0].id]);
   const [adaptationMode, setAdaptationMode] = useState<AdaptationMode>('crop');
   const [processing, setProcessing] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [clock, setClock] = useState(() => Date.now());
+  const uploadSequence = useRef(0);
 
   const selectedProfiles = EXPORT_PROFILES.filter((profile) => profileIds.includes(profile.id));
   const hasPipelineSteps = scale > 1 || fps > 0;
 
   const handleFile = (selectedFile: File) => {
+    const token = ++uploadSequence.current;
     setFile(selectedFile);
     setVideo(null);
     setJob(null);
     setExportJobs([]);
     setResult(null);
     setProcessing(false);
+    setUploading(true);
     setError(null);
+
+    // Upload immediately so the file metadata is available before the user
+    // configures the pipeline. Ignore responses for replaced files.
+    void uploadVideo(selectedFile)
+      .then((uploaded) => {
+        if (token === uploadSequence.current) {
+          setVideo(uploaded);
+          setUploading(false);
+        }
+      })
+      .catch((requestError: unknown) => {
+        if (token === uploadSequence.current) {
+          setUploading(false);
+          setError(getErrorMessage(requestError, 'Не удалось загрузить видео'));
+        }
+      });
   };
 
   const handleSubmit = async () => {
-    if (!file || !hasPipelineSteps) return;
+    if (!file || !video || !hasPipelineSteps) return;
     setProcessing(true);
     setError(null);
 
     try {
-      const sourceVideo = video ?? await uploadVideo(file);
-      setVideo(sourceVideo);
+      const sourceVideo = video;
 
       const steps: Array<{ type: 'upscale' | 'interpolate'; parameters: Record<string, number> }> = [];
       // Interpolate first at the source resolution, then upscale the result.
@@ -458,6 +477,7 @@ export default function App() {
         fps={fps}
         setFps={setFps}
         processing={processing}
+        uploading={uploading}
         hasPipelineSteps={hasPipelineSteps}
         exportProfiles={EXPORT_PROFILES}
         selectedProfileIds={profileIds}

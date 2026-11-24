@@ -7,17 +7,31 @@
   cursor: not-allowed;
 }
 
-.file-summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+.file-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 8px;
-  color: var(--muted);
-  font-size: 13px;
+  margin-top: 14px;
 }
 
-.file-summary strong {
+.file-meta-item {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.file-meta-item span {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.file-meta-item strong {
+  display: block;
+  margin-top: 2px;
   color: var(--text);
+  font-size: 12.5px;
   font-weight: 500;
 }
 

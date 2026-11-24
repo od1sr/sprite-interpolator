@@ -6,6 +6,12 @@ function formatBytes(bytes) {
   return `${(bytes / 1024 ** 3).toFixed(2)} ГБ`;
 }
 
+function formatVideoDuration(seconds) {
+  if (!seconds) return '—';
+  const total = Math.round(seconds);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
 export default function NewProcess({
   file,
   video,
@@ -15,6 +21,7 @@ export default function NewProcess({
   fps,
   setFps,
   processing,
+  uploading,
   hasPipelineSteps,
   exportProfiles,
   selectedProfileIds,
@@ -65,26 +72,53 @@ export default function NewProcess({
         </div>
         <Dropzone
           title={file?.name || 'Перетащите видео сюда'}
-          sub={file ? 'Нажмите, чтобы заменить файл' : 'или нажмите, чтобы выбрать файл'}
+          sub={file
+            ? uploading ? 'Загрузка видео…' : 'Нажмите, чтобы заменить файл'
+            : 'или нажмите, чтобы выбрать файл'}
           onFile={onFile}
           disabled={processing}
         />
         {file && (
-          <div className="file-summary" style={{ marginTop: 14 }}>
-            <strong>{file.name}</strong>
-            <span>,</span>
-            <span>{formatBytes(file.size)}</span>
+          <div className="file-meta">
+            {uploading && !video && (
+              <div className="file-meta-item">
+                <span>Метаданные</span>
+                <strong>Загрузка…</strong>
+              </div>
+            )}
+            <div className="file-meta-item">
+              <span>Размер</span>
+              <strong>{formatBytes(file.size)}</strong>
+            </div>
             {video?.width && video?.height && (
-              <>
-                <span>,</span>
-                <span>{video.width} × {video.height}</span>
-              </>
+              <div className="file-meta-item">
+                <span>Разрешение</span>
+                <strong>{video.width} × {video.height}</strong>
+              </div>
             )}
             {video?.fps && (
-              <>
-                <span>,</span>
-                <span>{video.fps} FPS</span>
-              </>
+              <div className="file-meta-item">
+                <span>Частота кадров</span>
+                <strong>{Number(video.fps).toFixed(1)} FPS</strong>
+              </div>
+            )}
+            {video?.duration_seconds && (
+              <div className="file-meta-item">
+                <span>Длительность</span>
+                <strong>{formatVideoDuration(video.duration_seconds)}</strong>
+              </div>
+            )}
+            {video?.codec && (
+              <div className="file-meta-item">
+                <span>Кодек</span>
+                <strong>{video.codec}</strong>
+              </div>
+            )}
+            {video?.content_type && (
+              <div className="file-meta-item">
+                <span>Формат</span>
+                <strong>{video.content_type}</strong>
+              </div>
             )}
           </div>
         )}
@@ -133,9 +167,9 @@ export default function NewProcess({
           <button
             className="btn btn-primary"
             onClick={onStart}
-            disabled={!file || !hasPipelineSteps || processing}
+            disabled={!file || !video || uploading || !hasPipelineSteps || processing}
           >
-            {processing ? 'Обработка…' : 'Запустить обработку'}
+            {uploading ? 'Загрузка…' : processing ? 'Обработка…' : 'Запустить обработку'}
           </button>
         </div>
         {!hasPipelineSteps && <div className="notice">Выберите хотя бы один рабочий этап обработки.</div>}
