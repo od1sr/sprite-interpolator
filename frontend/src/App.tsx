@@ -10,6 +10,7 @@ import {
 } from './api/client';
 import type { AdaptationMode, ExportJob, Job, Result, Video } from './types/api';
 import { useAuth } from './hooks/useAuth';
+import { formatDuration, getStepTiming } from './utils/processingTime';
 import Sidebar from './components/Sidebar';
 import Auth from './views/Auth';
 import Billing from './views/Billing';
@@ -39,6 +40,8 @@ interface StepProgressView {
   type: string;
   status: string;
   progress: number;
+  elapsedSeconds: number | null;
+  remainingSeconds: number | null;
 }
 
 interface TaskView {
@@ -303,11 +306,17 @@ function TaskRow({ task }: { task: TaskView }) {
             const stepProgress = stepDone
               ? 100
               : Math.max(0, Math.min(100, step.progress));
+            const timeLabel = stepDone && step.elapsedSeconds != null
+              ? ` · ${formatDuration(step.elapsedSeconds)}`
+              : null;
+            const statusLabel = step.status === 'processing' && step.remainingSeconds != null
+              ? `осталось ${formatDuration(step.remainingSeconds)}`
+              : `${stepDone ? 'Готово' : STATUS_LABELS[step.status] || step.status}${timeLabel ?? ''}`;
             return (
               <div key={`${task.id}-${step.type}-${index}`} className="proj-step">
                 <div className="proj-step-head">
                   <span>{STEP_LABELS[step.type] || step.type}</span>
-                  <span>{stepDone ? 'Готово' : STATUS_LABELS[step.status] || step.status}</span>
+                  <span>{statusLabel}</span>
                 </div>
                 <div className="proj-step-bar">
                   <div className={`bar${stepDone ? ' done' : ''}`}>
@@ -351,6 +360,7 @@ export default function App() {
   const [adaptationMode, setAdaptationMode] = useState<AdaptationMode>('crop');
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [clock, setClock] = useState(() => Date.now());
 
   const selectedProfiles = EXPORT_PROFILES.filter((profile) => profileIds.includes(profile.id));
   const hasPipelineSteps = scale > 1 || fps > 0;
@@ -451,6 +461,13 @@ export default function App() {
     return () => window.clearInterval(interval);
   }, [jobId, jobStatus]);
 
+  // Keep step ETAs moving even between API responses.
+  useEffect(() => {
+    if (!jobId || (jobStatus && ['completed', 'failed', 'cancelled'].includes(jobStatus))) return;
+    const interval = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [jobId, jobStatus]);
+
   useEffect(() => {
     const pendingIds = pendingExportIds ? pendingExportIds.split('|') : [];
     if (!pendingIds.length) return;
@@ -488,13 +505,20 @@ export default function App() {
       });
   }, [job?.id, job?.status, result]);
 
+  const jobStepTimings = useMemo(
+    () => (job?.steps ?? []).map((step) => getStepTiming(step, clock)),
+    [job?.steps, clock],
+  );
+
   const tasks = useMemo<TaskView[]>(() => {
     const items: TaskView[] = [];
     if (job) {
-      const stepViews: StepProgressView[] = (job.steps ?? []).map((step) => ({
+      const stepViews: StepProgressView[] = (job.steps ?? []).map((step, index) => ({
         type: step.type,
         status: step.status,
         progress: step.status === 'completed' ? 100 : step.progress ?? 0,
+        elapsedSeconds: jobStepTimings[index]?.elapsedSeconds ?? null,
+        remainingSeconds: jobStepTimings[index]?.remainingSeconds ?? null,
       }));
       items.push({
         id: job.id,
@@ -526,7 +550,7 @@ export default function App() {
       });
     });
     return items.sort((first, second) => second.createdAt.localeCompare(first.createdAt));
-  }, [exportJobs, file?.name, job, result]);
+  }, [exportJobs, file?.name, job, jobStepTimings, result]);
 
   const projectsForUi = useMemo(() => {
     return tasks.map((task, index) => ({
