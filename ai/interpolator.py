@@ -1,5 +1,6 @@
 # interpolator.py
 import cv2
+import logging
 import numpy as np
 import torch
 import math
@@ -15,6 +16,8 @@ sys.path.insert(0, str(RIFE_DIR))
 
 import interpolation_model as rife_model
 from progress import clear_progress, write_progress
+
+logger = logging.getLogger("ai.interpolator")
 
 
 class VideoInterpolator:
@@ -33,6 +36,7 @@ class VideoInterpolator:
         state_dict = load_file(model_path)
         self.model.load_state_dict(state_dict)
         self.model.to(device=self.device, dtype=self.dtype).eval()
+        logger.info("VideoInterpolator инициализирован: device=%s, dtype=%s", self.device, self.dtype)
 
     def _interpolate_pair(self, frame1: np.ndarray, frame2: np.ndarray) -> np.ndarray:
         """Single RIFE call: returns the frame at t=0.5 (BGR uint8)."""
@@ -83,6 +87,7 @@ class VideoInterpolator:
         return left + [mid] + right
 
     def process(self, input_path: str, output_path: str, target_fps: float) -> dict:
+        logger.info("Interpolate.start: device=%s, dtype=%s", self.device, self.dtype)
         cap = cv2.VideoCapture(input_path)
         if not cap.isOpened():
             raise IOError(f"Cannot open input video: {input_path}")

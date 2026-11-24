@@ -7,6 +7,10 @@
 backend/storage
 ai/weights
 ai/BasicSR-src
+ai/test_*.mp4
+ai/test.txt
+ai/_*.py
+ai/*.log
 frontend/.env
 frontend/.env.local
 backend/.env

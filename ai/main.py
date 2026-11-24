@@ -1,10 +1,14 @@
 # main.py
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+import logging
 import os
 from contextlib import asynccontextmanager
 
 from pathlib import Path
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("ai")
 
 upscaler_model = None
 interpolator_model = None
@@ -13,6 +17,21 @@ interpolator_model = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global upscaler_model, interpolator_model
+
+    import torch
+
+    cuda_available = torch.cuda.is_available()
+    logger.info(
+        "AI Service: torch=%s, CUDA доступен=%s, GPU=%d",
+        torch.__version__,
+        cuda_available,
+        torch.cuda.device_count() if cuda_available else 0,
+    )
+    if cuda_available:
+        logger.info("AI Service: обработка на GPU (%s)", torch.cuda.get_device_name(0))
+    else:
+        logger.info("AI Service: GPU недоступна в контейнере, обработка на CPU (FP32)")
+
     weights = Path(os.getenv("MODEL_PATH", "weights"))
     upscaler_weights = weights / "realesrgan" / "realesr-animevideov3.pth"
     interpolator_weights = weights / "rife" / "flownet.safetensors"
@@ -26,10 +45,11 @@ async def lifespan(app: FastAPI):
             upscaler_model = VideoUpscaler(
                 model_path=str(upscaler_weights), scale=4, tile_size=256, device="cuda"
             )
+            logger.info("Real-ESRGAN загружена: device=%s", upscaler_model.device)
         except Exception as exc:
-            print(f"Не удалось загрузить Real-ESRGAN: {exc}")
+            logger.exception("Не удалось загрузить Real-ESRGAN: %s", exc)
     else:
-        print(f"Веса Real-ESRGAN не найдены: {upscaler_weights}")
+        logger.warning("Веса Real-ESRGAN не найдены: %s", upscaler_weights)
 
     if interpolator_weights.is_file():
         try:
@@ -38,12 +58,17 @@ async def lifespan(app: FastAPI):
             interpolator_model = VideoInterpolator(
                 model_path=str(interpolator_weights), device="cuda"
             )
+            logger.info(
+                "RIFE загружена: device=%s, dtype=%s",
+                interpolator_model.device,
+                interpolator_model.dtype,
+            )
         except Exception as exc:
-            print(f"Не удалось загрузить RIFE: {exc}")
+            logger.exception("Не удалось загрузить RIFE: %s", exc)
     else:
-        print(f"Веса RIFE не найдены: {interpolator_weights}")
+        logger.warning("Веса RIFE не найдены: %s", interpolator_weights)
     yield
-    print("Выключение сервиса.")
+    logger.info("Выключение сервиса.")
 
 
 app = FastAPI(

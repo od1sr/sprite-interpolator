@@ -1,5 +1,6 @@
 # upscaler.py
 import cv2
+import logging
 import numpy as np
 import torch
 from pathlib import Path
@@ -8,6 +9,8 @@ from realesrgan import RealESRGANer
 from typing import Optional
 
 from progress import clear_progress, write_progress
+
+logger = logging.getLogger("ai.upscaler")
 
 
 class VideoUpscaler:
@@ -35,6 +38,7 @@ class VideoUpscaler:
             model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
 
         # Инициализируем enhancer
+        self.half = torch.cuda.is_available()
         self.upsampler = RealESRGANer(
             scale=scale,
             model_path=model_path,
@@ -42,8 +46,13 @@ class VideoUpscaler:
             tile=tile_size,        # 0 = без тайлинга, иначе 256/400/512
             tile_pad=10,
             pre_pad=0,
-            half=torch.cuda.is_available(),  # FP16 только на GPU; на CPU нужен FP32
+            half=self.half,  # FP16 только на GPU; на CPU нужен FP32
             device=self.device
+        )
+        logger.info(
+            "VideoUpscaler инициализирован: device=%s, half=%s",
+            self.device,
+            self.half,
         )
 
     def process(self, input_path: str, output_path: str) -> dict:
@@ -51,6 +60,7 @@ class VideoUpscaler:
         Обрабатывает видео: читает, апскейлит каждый кадр, записывает результат.
         Возвращает метаданные выходного файла.
         """
+        logger.info("Upscale.start: device=%s, dtype=%s", self.device, "fp16" if self.half else "fp32")
         cap = cv2.VideoCapture(input_path)
         if not cap.isOpened():
             raise IOError(f"Не удалось открыть входное видео: {input_path}")
