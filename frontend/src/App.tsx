@@ -319,7 +319,7 @@ function TaskRow({ task }: { task: TaskView }) {
                   <span>{statusLabel}</span>
                 </div>
                 <div className="proj-step-bar">
-                  <div className={`bar${stepDone ? ' done' : ''}`}>
+                  <div className={`bar${stepDone ? ' done' : step.status === 'processing' ? ' active' : ''}`}>
                     <i style={{ width: `${stepProgress}%` }} />
                   </div>
                   <span className="pct">{Math.round(stepProgress)}%</span>
@@ -330,7 +330,7 @@ function TaskRow({ task }: { task: TaskView }) {
         </div>
       ) : (
         <div className="proj-bar">
-          <div className={`bar${isReady ? ' done' : ''}`}>
+          <div className={`bar${isReady ? ' done' : task.status === 'processing' ? ' active' : ''}`}>
             <i style={{ width: `${isReady ? 100 : progress}%` }} />
           </div>
           <span className="pct">{Math.round(isReady ? 100 : progress)}%</span>

@@ -10,6 +10,7 @@
   --accent:#FF4D2E;
   --accent-hover:#FF654A;
   --accent-dim:rgba(255,77,46,.09);
+  --progress:#2F6BFF;
   --ok:#1F9D55;
   --warn:#C27C0E;
   --err:#D64545;
@@ -466,6 +467,13 @@ img{max-width:100%}
 .proj-bar{display:flex;align-items:center;gap:10px;width:150px;flex:0 0 auto}
 .bar{height:5px;border-radius:99px;background:rgba(15,23,42,.08);overflow:hidden;flex:1}
 .bar > i{display:block;height:100%;border-radius:99px;background:var(--accent);transition:width .45s ease}
+.bar.active > i{
+  background-color:transparent;
+  background-image:repeating-linear-gradient(60deg,var(--progress) 0 10px,transparent 10px 20px);
+  background-size:23.094px 100%;
+  animation:progress-stripes .6s linear infinite;
+}
+@keyframes progress-stripes{to{background-position:23.094px 0}}
 .bar.done > i{background:var(--ok)}
 .proj-bar .pct{font-size:12px;color:var(--muted);width:34px;text-align:right;font-variant-numeric:tabular-nums}
 .proj-steps{display:flex;flex-direction:column;gap:9px;width:230px;flex:0 0 auto}
