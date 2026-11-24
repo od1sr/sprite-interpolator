@@ -1,4 +1,17 @@
+import { useEffect, useRef, useState } from 'react';
 import Dropzone from '../components/Dropzone';
+
+const SCALE_OPTIONS = [
+  { value: 1, label: 'Не применять' },
+  { value: 2, label: '2×' },
+  { value: 4, label: '4×' },
+];
+
+const FPS_OPTIONS = [
+  { value: 0, label: 'Не применять' },
+  { value: 60, label: '60 FPS' },
+  { value: 120, label: '120 FPS' },
+];
 
 function formatBytes(bytes) {
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(0)} КБ`;
@@ -10,6 +23,128 @@ function formatVideoDuration(seconds) {
   if (!seconds) return '—';
   const total = Math.round(seconds);
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+function StepHeader({ number, title, hint }) {
+  return (
+    <div className="panel-head step-head">
+      <div className="step-heading">
+        <span className="step-number">{number}</span>
+        <h3>{title}</h3>
+      </div>
+      <span className="muted-sm">{hint}</span>
+    </div>
+  );
+}
+
+function StyledSelect({ value, options, onChange, disabled = false, label }) {
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(() =>
+    Math.max(0, options.findIndex((option) => option.value === value)));
+  const rootRef = useRef(null);
+  const selected = options.find((option) => option.value === value) ?? options[0];
+
+  useEffect(() => {
+    setActiveIndex(Math.max(0, options.findIndex((option) => option.value === value)));
+  }, [value, options]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const closeOnOutsideClick = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
+
+  const chooseOption = (option) => {
+    onChange(option.value);
+    setOpen(false);
+  };
+
+  const handleKeyDown = (event) => {
+    if (disabled) return;
+
+    if (!open) {
+      if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(event.key)) {
+        event.preventDefault();
+        setOpen(true);
+      }
+      return;
+    }
+
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveIndex((current) => {
+        const next = event.key === 'ArrowDown' ? current + 1 : current - 1;
+        return (next + options.length) % options.length;
+      });
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      chooseOption(options[activeIndex]);
+    }
+  };
+
+  return (
+    <div className="select-field" ref={rootRef}>
+      <button
+        type="button"
+        className="select pipeline-select"
+        onClick={() => !disabled && setOpen((current) => !current)}
+        onKeyDown={handleKeyDown}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={label}
+      >
+        <span>{selected.label}</span>
+        <svg
+          className={`select-chevron${open ? ' open' : ''}`}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="select-popover" role="listbox" aria-label={label}>
+          {options.map((option, index) => (
+            <button
+              key={option.value}
+              type="button"
+              role="option"
+              aria-selected={option.value === value}
+              className={`select-option${index === activeIndex ? ' active' : ''}${option.value === value ? ' selected' : ''}`}
+              onMouseEnter={() => setActiveIndex(index)}
+              onClick={() => chooseOption(option)}
+            >
+              <span>{option.label}</span>
+              {option.value === value && (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m5 12 4 4L19 6" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function NewProcess({
@@ -52,15 +187,16 @@ export default function NewProcess({
         <div>
           <span className="welcome-eyebrow">Обработка</span>
           <h2 className="welcome-title">Новая обработка</h2>
-          <p className="welcome-sub">Загрузите видео, соберите пайплайн и настройте экспорт — всё запускается одной задачей.</p>
+
         </div>
       </div>
 
       <div className="panel">
-        <div className="panel-head">
-          <h3>1. Видео</h3>
-          <span className="muted-sm">MP4, MOV, WebM, до 2 ГБ</span>
-        </div>
+        <StepHeader
+          number="01"
+          title="Видео"
+          hint="MP4, MOV, WebM, до 2 ГБ"
+        />
         <Dropzone
           title={file?.name || 'Перетащите видео сюда'}
           sub={file
@@ -110,51 +246,49 @@ export default function NewProcess({
       </div>
 
       <div className="panel">
-        <div className="panel-head">
-          <h3>2. Пайплайн</h3>
-          <span className="muted-sm">Включите нужные модули</span>
-        </div>
+        <StepHeader
+          number="02"
+          title="Пайплайн"
+          hint="Включите нужные модули"
+        />
 
         <div className="opt-grid">
           <div className="opt">
             <div className="opt-head"><b>Апскейл</b></div>
             <p>Множитель разрешения из существующего API</p>
-            <select
-              className="select"
+            <StyledSelect
+              label="Множитель разрешения"
               value={scale}
-              onChange={(event) => setScale(Number(event.target.value))}
+              options={SCALE_OPTIONS}
+              onChange={setScale}
               disabled={processing}
-            >
-              <option value={1}>Не применять</option>
-              <option value={2}>2×</option>
-              <option value={4}>4×</option>
-            </select>
+            />
           </div>
 
           <div className="opt">
             <div className="opt-head"><b>Интерполяция</b></div>
             <p>Целевая частота кадров</p>
-            <select
-              className="select"
+            <StyledSelect
+              label="Целевая частота кадров"
               value={fps}
-              onChange={(event) => setFps(Number(event.target.value))}
+              options={FPS_OPTIONS}
+              onChange={setFps}
               disabled={processing}
-            >
-              <option value={0}>Не применять</option>
-              <option value={60}>60 FPS</option>
-              <option value={120}>120 FPS</option>
-            </select>
+            />
           </div>
         </div>
 
-        {!hasPipelineSteps && <div className="notice">Выберите хотя бы один рабочий этап обработки.</div>}
+        {!hasPipelineSteps && (
+          <div className="notice pipeline-notice">Выберите хотя бы один рабочий этап обработки.</div>
+        )}
       </div>
 
       <div className="panel">
-        <div className="panel-head">
-          <h3>3. Экспорт</h3>
-          <span className="muted-sm">Необязательно, запускается вместе с обработкой</span>
-        </div>
+        <StepHeader
+          number="03"
+          title="Экспорт"
+          hint="Необязательно, запускается вместе с обработкой"
+        />
 
         <div className="format-presets">
           <span>Быстрый выбор ориентации</span>
@@ -234,15 +368,16 @@ export default function NewProcess({
           </div>
         )}
 
-        <div className="panel-foot start-foot">
-          <button
-            className="btn btn-primary"
-            onClick={onStart}
-            disabled={!file || !video || uploading || !hasPipelineSteps || processing}
-          >
-            {uploading ? 'Загрузка…' : processing ? 'Обработка…' : 'Запустить обработку'}
-          </button>
-        </div>
+      </div>
+
+      <div className="page-actions">
+        <button
+          className="btn btn-primary"
+          onClick={onStart}
+          disabled={!file || !video || uploading || !hasPipelineSteps || processing}
+        >
+          {uploading ? 'Загрузка…' : processing ? 'Обработка…' : 'Запустить обработку'}
+        </button>
       </div>
     </div>
   );
