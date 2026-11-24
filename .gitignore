@@ -49,3 +49,8 @@ temp/
 *.gz
 
 compose.gpu.yaml
+
+# AI model weights (downloaded locally, not committed)
+ai/weights/**/*.pth
+ai/weights/**/*.safetensors
+ai/weights/**/interpolation_model.py

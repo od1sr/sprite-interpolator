@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from uuid import uuid4
 
@@ -132,6 +133,22 @@ def test_ai_client_uses_documented_request_and_validates_shared_output(worker_co
         "params": {"target_fps": 60},
     }
     assert result["status"] == "completed"
+
+
+def test_step_progress_is_read_from_ai_progress_file(worker_context):
+    worker, _, root, _ = worker_context
+    output_path = root / "jobs" / "step.mp4"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    progress_file = Path(f"{output_path}.progress")
+    progress_file.write_text(json.dumps({"processed": 4, "total": 8, "percent": 50}), encoding="utf-8")
+
+    assert worker._read_step_progress(output_path) == 50
+
+    progress_file.write_text(json.dumps({"percent": 150}), encoding="utf-8")
+    assert worker._read_step_progress(output_path) == 99
+
+    progress_file.unlink()
+    assert worker._read_step_progress(output_path) is None
 
 
 def test_worker_records_retryable_ai_failure(worker_context, monkeypatch):

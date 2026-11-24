@@ -273,7 +273,10 @@ function TaskRow({ task }: { task: TaskView }) {
           <span title={task.name}>{task.name}</span>
           <span className={`pill ${tone}`}>{STATUS_LABELS[task.status] || task.status}</span>
         </div>
-        <div className="proj-meta">{task.kind}, {task.message || `Задача ${task.id.slice(0, 8)}`}</div>
+        <div className="proj-meta">
+          {task.kind}, {task.message || `Задача ${task.id.slice(0, 8)}`}
+          {!isReady && !isFailed && task.status !== 'queued' && ` · ${Math.round(progress)}%`}
+        </div>
         {task.status === 'ready' && !task.downloadUrl && (
           <div className="task-result-message">
             Экспорт завершён. Ссылка на скачивание пока недоступна.
@@ -386,22 +389,28 @@ export default function App() {
     .map((task) => task.id)
     .join('|');
 
+  const jobId = job?.id;
+  const jobStatus = job?.status;
   useEffect(() => {
-    if (!job) return;
-    if (['completed', 'failed', 'cancelled'].includes(job.status)) {
+    if (!jobId) return;
+    if (jobStatus && ['completed', 'failed', 'cancelled'].includes(jobStatus)) {
       setProcessing(false);
       return;
     }
 
     const interval = window.setInterval(async () => {
       try {
-        setJob(await getJobStatus(job.id));
+        const updated = await getJobStatus(jobId);
+        setJob(updated);
+        if (['completed', 'failed', 'cancelled'].includes(updated.status)) {
+          setProcessing(false);
+        }
       } catch (pollError) {
         setError(getErrorMessage(pollError, 'Не удалось обновить состояние обработки'));
       }
-    }, 2000);
+    }, 1000);
     return () => window.clearInterval(interval);
-  }, [job]);
+  }, [jobId, jobStatus]);
 
   useEffect(() => {
     const pendingIds = pendingExportIds ? pendingExportIds.split('|') : [];

@@ -1,6 +1,8 @@
+import json
 import logging
 import math
 import shutil
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -99,7 +101,7 @@ def _update_step(job_id: UUID, index: int, *, status: str, progress: float, erro
         steps = [dict(step) for step in job.steps]
         steps[index]["status"] = status
         steps[index]["progress"] = progress
-        if status == "processing":
+        if status == "processing" and not steps[index].get("started_at"):
             steps[index]["started_at"] = _now().isoformat().replace("+00:00", "Z")
         if status in {"completed", "failed", "cancelled"}:
             steps[index]["finished_at"] = _now().isoformat().replace("+00:00", "Z")
@@ -108,6 +110,18 @@ def _update_step(job_id: UUID, index: int, *, status: str, progress: float, erro
         job.steps = steps
         job.current_step = index
         job.progress = round(sum(float(step.get("progress", 0)) for step in steps) / len(steps), 2)
+
+
+def _read_step_progress(output_path: Path) -> float | None:
+    """Read the progress file written by the AI service into shared storage."""
+    try:
+        payload = json.loads(Path(f"{output_path}.progress").read_text(encoding="utf-8"))
+        value = float(payload["percent"])
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
+    if not math.isfinite(value):
+        return None
+    return min(99.0, max(0.0, value))
 
 
 def _call_ai(step_type: str, input_path: Path, output_path: Path, parameters: dict[str, Any]) -> dict[str, Any]:
@@ -202,7 +216,23 @@ def process_job(_: Any, job_id: str) -> None:
             _update_step(parsed_id, index, status="processing", progress=0)
             output_path = work_dir / f"step-{index:02d}-{step['type']}.mp4"
             try:
-                final_metadata = _call_ai(step["type"], current_input, output_path, step["parameters"])
+                # The AI call is synchronous; run it in a thread so we can keep
+                # publishing its frame-level progress to the database while it works.
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(
+                        _call_ai, step["type"], current_input, output_path, step["parameters"]
+                    )
+                    while True:
+                        percent = _read_step_progress(output_path)
+                        if percent is not None:
+                            _raise_if_cancelled(parsed_id)
+                            _update_step(parsed_id, index, status="processing", progress=percent)
+                        try:
+                            future.result(timeout=1.0)
+                            break
+                        except FutureTimeout:
+                            continue
+                    final_metadata = future.result()
             except PipelineFailure as exc:
                 error = {
                     "code": exc.code,

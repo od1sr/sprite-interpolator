@@ -46,7 +46,7 @@ cd sprite-interpolator
 
 После изменения кода пересобирай и запускай нужный сервис той же командой с `--build`. Для просмотра логов конкретного сервиса используй `.\compose.cmd logs -f frontend`; для перезапуска без пересборки — `.\compose.cmd restart frontend`; для остановки — `.\compose.cmd stop frontend`. Имена сервисов: `frontend`, `backend`, `ai`, `worker`, `postgres`, `redis`, `migrate`. `migrate` — одноразовый сервис миграции базы, он выполняется автоматически как зависимость backend и worker.
 
-AI-контейнер запускается без весов моделей. Для операций обработки положи веса в `ai/weights/realesrgan/realesr-animevideov3.pth` и `ai/weights/rife/flownet.safetensors`; папка подключается в контейнер только для чтения. На компьютере без настроенного GPU стек запускается без NVIDIA GPU (обработка будет выполняться на CPU, если поддерживается приложением). NVIDIA GPU требует отдельной настройки Docker Desktop и драйвера, а также запуска с дополнительным Compose-файлом:
+Для операций обработки нужны веса: `ai/weights/realesrgan/realesr-animevideov3.pth`, `ai/weights/rife/flownet.safetensors` и `ai/weights/rife/interpolation_model.py`. Их можно скачать шагом 6 скрипта `ai/setup.ps1` (или вручную по ссылкам из него); бинарные веса не коммитятся в git. Папка `ai/weights` подключается в контейнер только для чтения. На компьютере без NVIDIA GPU обработка выполняется на CPU (FP32). NVIDIA GPU требует отдельной настройки Docker Desktop и драйвера, а также запуска с дополнительным Compose-файлом:
 
 ```powershell
 .\compose.cmd -f compose.yaml -f compose.gpu.yaml up --build

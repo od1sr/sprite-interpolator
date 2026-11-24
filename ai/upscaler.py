@@ -40,7 +40,7 @@ class VideoUpscaler:
             tile=tile_size,        # 0 = без тайлинга, иначе 256/400/512
             tile_pad=10,
             pre_pad=0,
-            half=True,             # Использовать FP16 для ускорения на GPU
+            half=torch.cuda.is_available(),  # FP16 только на GPU; на CPU нужен FP32
             device=self.device
         )
 

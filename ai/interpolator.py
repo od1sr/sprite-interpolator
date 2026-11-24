@@ -13,7 +13,7 @@ if not RIFE_DIR.exists():
     raise FileNotFoundError(f"RIFE weights dir not found: {RIFE_DIR}")
 sys.path.insert(0, str(RIFE_DIR))
 
-from interpolation_model import IFNet
+import interpolation_model as rife_model
 
 
 class VideoInterpolator:
@@ -23,18 +23,27 @@ class VideoInterpolator:
 
     def __init__(self, model_path: str, device: str = "cuda"):
         self.device = torch.device(device if torch.cuda.is_available() else "cpu")
-        self.model = IFNet()
+        # RIFE's warp() builds its sampling grid in FP16 for GPU; on CPU FP16
+        # grid_sample is unsupported, so use FP32 there.
+        self.dtype = torch.float16 if self.device.type == "cuda" else torch.float32
+        rife_model.device = self.device
+        rife_model.dtype = self.dtype
+        self.model = rife_model.IFNet()
         state_dict = load_file(model_path)
         self.model.load_state_dict(state_dict)
-        self.model.to(self.device).eval()
+        self.model.to(device=self.device, dtype=self.dtype).eval()
 
     def _interpolate_pair(self, frame1: np.ndarray, frame2: np.ndarray) -> np.ndarray:
         """Single RIFE call: returns the frame at t=0.5 (BGR uint8)."""
         f1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
         f2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
 
-        t1 = torch.from_numpy(f1).permute(2, 0, 1).unsqueeze(0).to(self.device)
-        t2 = torch.from_numpy(f2).permute(2, 0, 1).unsqueeze(0).to(self.device)
+        t1 = torch.from_numpy(f1).permute(2, 0, 1).unsqueeze(0).to(
+            device=self.device, dtype=self.dtype
+        )
+        t2 = torch.from_numpy(f2).permute(2, 0, 1).unsqueeze(0).to(
+            device=self.device, dtype=self.dtype
+        )
 
         _, _, H, W = t1.shape
         d = self.RIFE_DIVISOR
