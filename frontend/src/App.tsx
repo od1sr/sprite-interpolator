@@ -35,12 +35,19 @@ interface ExportProfile {
 
 type ExportTask = ExportJob;
 
+interface StepProgressView {
+  type: string;
+  status: string;
+  progress: number;
+}
+
 interface TaskView {
   id: string;
   name: string;
   kind: string;
   status: string;
   progress: number;
+  steps?: StepProgressView[];
   message?: string;
   downloadUrl?: string;
   createdAt: string;
@@ -96,6 +103,11 @@ const STATUS_LABELS: Record<string, string> = {
   failed: 'Ошибка',
   cancelling: 'Отмена',
   cancelled: 'Отменено',
+};
+
+const STEP_LABELS: Record<string, string> = {
+  upscale: 'Апскейл',
+  interpolate: 'Интерполяция',
 };
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -264,6 +276,7 @@ function TaskRow({ task }: { task: TaskView }) {
   const isFailed = task.status === 'failed';
   const tone = isReady ? 'pill-ok' : isFailed ? 'pill-err' : task.status === 'queued' ? '' : 'pill-run';
   const progress = Math.max(0, Math.min(100, task.progress));
+  const showSteps = Boolean(task.steps && task.steps.length > 1);
 
   return (
     <div className="proj">
@@ -283,12 +296,37 @@ function TaskRow({ task }: { task: TaskView }) {
           </div>
         )}
       </div>
-      <div className="proj-bar">
-        <div className={`bar${isReady ? ' done' : ''}`}>
-          <i style={{ width: `${isReady ? 100 : progress}%` }} />
+      {showSteps && task.steps ? (
+        <div className="proj-steps">
+          {task.steps.map((step, index) => {
+            const stepDone = step.status === 'completed' || isReady;
+            const stepProgress = stepDone
+              ? 100
+              : Math.max(0, Math.min(100, step.progress));
+            return (
+              <div key={`${task.id}-${step.type}-${index}`} className="proj-step">
+                <div className="proj-step-head">
+                  <span>{STEP_LABELS[step.type] || step.type}</span>
+                  <span>{stepDone ? 'Готово' : STATUS_LABELS[step.status] || step.status}</span>
+                </div>
+                <div className="proj-step-bar">
+                  <div className={`bar${stepDone ? ' done' : ''}`}>
+                    <i style={{ width: `${stepProgress}%` }} />
+                  </div>
+                  <span className="pct">{Math.round(stepProgress)}%</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
-        <span className="pct">{Math.round(isReady ? 100 : progress)}%</span>
-      </div>
+      ) : (
+        <div className="proj-bar">
+          <div className={`bar${isReady ? ' done' : ''}`}>
+            <i style={{ width: `${isReady ? 100 : progress}%` }} />
+          </div>
+          <span className="pct">{Math.round(isReady ? 100 : progress)}%</span>
+        </div>
+      )}
       {task.downloadUrl && (
         <a className="btn btn-ghost btn-sm" href={task.downloadUrl} download>
           Скачать
@@ -337,8 +375,9 @@ export default function App() {
       setVideo(sourceVideo);
 
       const steps: Array<{ type: 'upscale' | 'interpolate'; parameters: Record<string, number> }> = [];
-      if (scale > 1) steps.push({ type: 'upscale', parameters: { scale: Number(scale) } });
+      // Interpolate first at the source resolution, then upscale the result.
       if (fps > 0) steps.push({ type: 'interpolate', parameters: { target_fps: Number(fps) } });
+      if (scale > 1) steps.push({ type: 'upscale', parameters: { scale: Number(scale) } });
 
       setJob(await createJob(sourceVideo.id, steps));
     } catch (requestError) {
@@ -452,12 +491,20 @@ export default function App() {
   const tasks = useMemo<TaskView[]>(() => {
     const items: TaskView[] = [];
     if (job) {
+      const stepViews: StepProgressView[] = (job.steps ?? []).map((step) => ({
+        type: step.type,
+        status: step.status,
+        progress: step.status === 'completed' ? 100 : step.progress ?? 0,
+      }));
       items.push({
         id: job.id,
         name: file?.name || `Обработка ${job.id.slice(0, 8)}`,
-        kind: 'Апскейл и интерполяция',
+        kind: stepViews.length
+          ? stepViews.map((step) => STEP_LABELS[step.type] || step.type).join(' + ')
+          : 'Апскейл и интерполяция',
         status: job.status,
         progress: job.progress ?? 0,
+        steps: stepViews,
         message: job.error?.message || job.message,
         downloadUrl: result ? resolveApiUrl(result.download_url) : undefined,
         createdAt: job.created_at,
