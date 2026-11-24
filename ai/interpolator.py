@@ -14,6 +14,7 @@ if not RIFE_DIR.exists():
 sys.path.insert(0, str(RIFE_DIR))
 
 import interpolation_model as rife_model
+from progress import clear_progress, write_progress
 
 
 class VideoInterpolator:
@@ -161,11 +162,14 @@ class VideoInterpolator:
                 prev = curr.copy()
                 processed += 1
                 if processed % report_every == 0:
+                    write_progress(output_path, processed, total_frames - 1)
                     pct = 100 * processed // (total_frames - 1)
                     print(f"[interpolate] {processed}/{total_frames-1} pairs ({pct}%), factor={factor}x")
+            write_progress(output_path, processed, total_frames - 1)
         finally:
             cap.release()
             out.release()
+            clear_progress(output_path)
 
         return self._result(output_path, width, height, actual_fps,
                             total_frames / source_fps, source_fps, factor, n_mid)

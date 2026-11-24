@@ -7,6 +7,8 @@ from basicsr.archs.rrdbnet_arch import RRDBNet
 from realesrgan import RealESRGANer
 from typing import Optional
 
+from progress import clear_progress, write_progress
+
 
 class VideoUpscaler:
     """Обертка над Real-ESRGAN для апскейла видео."""
@@ -68,27 +70,33 @@ class VideoUpscaler:
         out = cv2.VideoWriter(output_path, fourcc, fps, (out_width, out_height))
 
         processed_frames = 0
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
+        report_every = max(1, total_frames // 100)
+        try:
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
 
-            # Real-ESRGAN ожидает BGR-изображение (как у OpenCV)
-            try:
-                output_frame, _ = self.upsampler.enhance(frame, outscale=self.scale)
-            except RuntimeError as e:
-                # Если не хватает памяти, можно попробовать уменьшить tile_size
-                print(f"Ошибка при обработке кадра: {e}. Попробуйте уменьшить tile_size.")
-                raise
+                # Real-ESRGAN ожидает BGR-изображение (как у OpenCV)
+                try:
+                    output_frame, _ = self.upsampler.enhance(frame, outscale=self.scale)
+                except RuntimeError as e:
+                    # Если не хватает памяти, можно попробовать уменьшить tile_size
+                    print(f"Ошибка при обработке кадра: {e}. Попробуйте уменьшить tile_size.")
+                    raise
 
-            out.write(output_frame)
-            processed_frames += 1
+                out.write(output_frame)
+                processed_frames += 1
 
-            if processed_frames % 100 == 0:
-                print(f"Обработано кадров: {processed_frames}/{total_frames}")
+                if processed_frames % report_every == 0:
+                    write_progress(output_path, processed_frames, total_frames)
+                    print(f"Обработано кадров: {processed_frames}/{total_frames}")
 
-        cap.release()
-        out.release()
+            write_progress(output_path, processed_frames, total_frames)
+        finally:
+            cap.release()
+            out.release()
+            clear_progress(output_path)
 
         # Собираем метаданные результата
         result = {
