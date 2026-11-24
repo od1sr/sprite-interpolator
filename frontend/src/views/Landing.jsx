@@ -100,13 +100,17 @@ export default function Landing({ onAuthClick }) {
                 <div className="card">
                   <div className="card-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M3 6h5.5a3 3 0 0 1 3 3v6a3 3 0 0 0 3 3H21"/>
-                      <path d="M3 18h5.5a3 3 0 0 0 3-3V9a3 3 0 0 1 3-3H21"/>
+                      <path d="M4 6h16"/>
+                      <path d="M4 12h16"/>
+                      <path d="M4 18h16"/>
+                      <circle cx="9" cy="6" r="2" fill="currentColor" stroke="none"/>
+                      <circle cx="15" cy="12" r="2" fill="currentColor" stroke="none"/>
+                      <circle cx="7" cy="18" r="2" fill="currentColor" stroke="none"/>
                     </svg>
                   </div>
-                  <h3>Склейка</h3>
-                  <p>Объединяйте клипы в единый таймлайн с авто-нормализацией кадровой сетки.</p>
-                  <span className="tag">N клипов</span>
+                  <h3>Цветокоррекция</h3>
+                  <p>Выравнивайте цвет, контраст и яркость, чтобы весь ролик выглядел единообразно.</p>
+                  <span className="tag">LUT, HSV</span>
                 </div>
 
               </div>
@@ -132,7 +136,7 @@ export default function Landing({ onAuthClick }) {
                 <div className="step">
                   <span className="step-num">02</span>
                   <h4>Соберите пайплайн</h4>
-                  <p>Включите нужные модули: апскейл, интерполяцию и склейку.</p>
+                  <p>Включите нужные модули: апскейл, интерполяцию и цветокоррекцию.</p>
                 </div>
                 <div className="step">
                   <span className="step-num">03</span>
