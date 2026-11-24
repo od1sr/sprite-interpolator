@@ -14,7 +14,6 @@ export default function Sidebar({ currentView, setView, user, getPlan, onLogout 
   const menuItems = [
     { id: 'dashboard', label: 'Обзор', icon: 'M3 3h7.5v7.5H3zM13.5 3h7.5v7.5h-7.5zM3 13.5h7.5v7.5H3zM13.5 13.5h7.5v7.5h-7.5z' },
     { id: 'new', label: 'Новая обработка', icon: 'M12 5v14M5 12h14' },
-    { id: 'adapt', label: 'Адаптация', icon: 'M4 7h16M4 12h16M4 17h16' },
     { id: 'projects', label: 'Проекты', icon: 'M3 7.5A2 2 0 0 1 5 5.5h4l2 2.2h8a2 2 0 0 1 2 2v8.8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7.5Z' },
     { id: 'settings', label: 'Настройки', icon: settingsIcon },
     { id: 'billing', label: 'Тариф и оплата', icon: 'M2.5 5.5h19v13H2.5zM2.5 10h19' },

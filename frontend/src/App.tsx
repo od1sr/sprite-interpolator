@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   createJob,
   createVideoExport,
@@ -21,7 +21,7 @@ import Projects from './views/Projects';
 import Settings from './views/Settings';
 import './App.css';
 
-type View = 'landing' | 'auth' | 'dashboard' | 'new' | 'adapt' | 'projects' | 'settings' | 'billing';
+type View = 'landing' | 'auth' | 'dashboard' | 'new' | 'projects' | 'settings' | 'billing';
 
 interface ExportProfile {
   id: string;
@@ -50,6 +50,7 @@ interface TaskView {
   status: string;
   progress: number;
   steps?: StepProgressView[];
+  subtasks?: TaskView[];
   message?: string;
   downloadUrl?: string;
   createdAt: string;
@@ -87,7 +88,6 @@ const VIEW_TITLES: Record<View, string> = {
   auth: 'Вход',
   dashboard: 'Обзор',
   new: 'Новая обработка',
-  adapt: 'Адаптация под платформу',
   projects: 'Проекты',
   settings: 'Настройки аккаунта',
   billing: 'Тариф и оплата',
@@ -115,160 +115,36 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(0)} КБ`;
-  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} МБ`;
-  return `${(bytes / 1024 ** 3).toFixed(2)} ГБ`;
-}
-
-function FileDropzone({
-  file,
-  onFile,
-  disabled,
-}: {
-  file: File | null;
-  onFile: (file: File) => void;
-  disabled: boolean;
-}) {
-  const [dragging, setDragging] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const chooseFile = () => {
-    if (!disabled) inputRef.current?.click();
-  };
-
-  const acceptFile = (candidate?: File) => {
-    if (!disabled && candidate) onFile(candidate);
-  };
+function SubtaskRow({ task }: { task: TaskView }) {
+  const isReady = task.status === 'ready' || task.status === 'completed';
+  const isFailed = task.status === 'failed';
+  const tone = isReady ? 'pill-ok' : isFailed ? 'pill-err' : task.status === 'queued' ? '' : 'pill-run';
+  const progress = Math.max(0, Math.min(100, task.progress));
 
   return (
-    <div
-      className={`dropzone${dragging ? ' drag' : ''}${disabled ? ' is-disabled' : ''}`}
-      role="button"
-      tabIndex={disabled ? -1 : 0}
-      aria-disabled={disabled}
-      onClick={chooseFile}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          chooseFile();
-        }
-      }}
-      onDragOver={(event) => {
-        event.preventDefault();
-        if (!disabled) setDragging(true);
-      }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={(event) => {
-        event.preventDefault();
-        setDragging(false);
-        acceptFile(event.dataTransfer.files[0]);
-      }}
-    >
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm"
-        onClick={(event) => event.stopPropagation()}
-        onChange={(event) => {
-          acceptFile(event.currentTarget.files?.[0]);
-          event.currentTarget.value = '';
-        }}
-      />
-      <div className="dz-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 16V4" />
-          <path d="m7 9 5-5 5 5" />
-          <path d="M4 16v2.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V16" />
-        </svg>
+    <div className="proj-subtask">
+      <div className="proj-subtask-main">
+        <div className="proj-name">
+          <span title={task.name}>{task.name}</span>
+          <span className={`pill ${tone}`}>{STATUS_LABELS[task.status] || task.status}</span>
+        </div>
+        <div className="proj-meta">
+          {task.kind}{task.message ? `, ${task.message}` : ''}
+          {!isReady && !isFailed && task.status !== 'queued' && ` · ${Math.round(progress)}%`}
+        </div>
       </div>
-      <div className="dz-title">{file ? file.name : 'Перетащите видео сюда'}</div>
-      <div className="dz-sub">
-        {file
-          ? 'Нажмите, чтобы заменить файл'
-          : 'или нажмите, чтобы выбрать, MP4, MOV, WebM, до 2 ГБ'}
+      <div className="proj-bar">
+        <div className={`bar${isReady ? ' done' : task.status === 'processing' ? ' active' : ''}`}>
+          <i style={{ width: `${isReady ? 100 : progress}%` }} />
+        </div>
+        <span className="pct">{Math.round(isReady ? 100 : progress)}%</span>
       </div>
-    </div>
-  );
-}
-
-function SourcePanel({
-  file,
-  video,
-  onFile,
-  disabled,
-}: {
-  file: File | null;
-  video: Video | null;
-  onFile: (file: File) => void;
-  disabled: boolean;
-}) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!file) {
-      setPreviewUrl(null);
-      return;
-    }
-
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
-
-  return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>1. Исходное видео</h3>
-        <span className="muted-sm">MP4, MOV, WebM</span>
-      </div>
-      {!file ? (
-        <FileDropzone file={file} onFile={onFile} disabled={disabled} />
-      ) : (
-        <>
-          <div className="source-preview">
-            {previewUrl && <video src={previewUrl} controls />}
-            <div className="source-details">
-              <div className="source-detail">
-                <span>Файл</span>
-                <strong title={file.name}>{file.name}</strong>
-              </div>
-              <div className="source-detail">
-                <span>Размер</span>
-                <strong>{formatBytes(file.size)}</strong>
-              </div>
-              {video && (
-                <>
-                  <div className="source-detail">
-                    <span>Разрешение</span>
-                    <strong>
-                      {video.width && video.height ? `${video.width} × ${video.height}` : '—'}
-                    </strong>
-                  </div>
-                  <div className="source-detail">
-                    <span>Частота кадров</span>
-                    <strong>{video.fps ? `${video.fps} FPS` : '—'}</strong>
-                  </div>
-                  <div className="source-detail">
-                    <span>Длительность</span>
-                    <strong>
-                      {video.duration_seconds
-                        ? `${Math.floor(video.duration_seconds / 60)}:${Math.floor(video.duration_seconds % 60)
-                            .toString()
-                            .padStart(2, '0')}`
-                        : '—'}
-                    </strong>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-          <div style={{ marginTop: 16 }}>
-            <FileDropzone file={file} onFile={onFile} disabled={disabled} />
-          </div>
-        </>
+      {task.downloadUrl && (
+        <a className="btn btn-ghost btn-sm" href={task.downloadUrl} download>
+          Скачать
+        </a>
       )}
-    </section>
+    </div>
   );
 }
 
@@ -280,6 +156,7 @@ function TaskRow({ task }: { task: TaskView }) {
   const showSteps = Boolean(task.steps && task.steps.length > 1);
 
   return (
+    <>
     <div className="proj">
       <div className="thumb" aria-hidden="true" />
       <div className="proj-main">
@@ -334,12 +211,14 @@ function TaskRow({ task }: { task: TaskView }) {
           <span className="pct">{Math.round(isReady ? 100 : progress)}%</span>
         </div>
       )}
-      {task.downloadUrl && (
-        <a className="btn btn-ghost btn-sm" href={task.downloadUrl} download>
-          Скачать
-        </a>
-      )}
     </div>
+    {task.subtasks && task.subtasks.length > 0 && (
+      <div className="proj-subtasks">
+        <div className="proj-subtasks-head">Экспорт</div>
+        {task.subtasks.map((subtask) => <SubtaskRow key={subtask.id} task={subtask} />)}
+      </div>
+    )}
+    </>
   );
 }
 
@@ -388,45 +267,26 @@ export default function App() {
       if (scale > 1) steps.push({ type: 'upscale', parameters: { scale: Number(scale) } });
 
       setJob(await createJob(sourceVideo.id, steps));
-    } catch (requestError) {
-      setError(getErrorMessage(requestError, 'Ошибка при отправке задачи'));
-      setProcessing(false);
-    }
-  };
 
-  const handleExportSubmit = async () => {
-    if (!file) return;
-    if (!selectedProfiles.length) {
-      setError('Выберите хотя бы один профиль экспорта');
-      return;
-    }
-    setProcessing(true);
-    setError(null);
-
-    try {
-      const sourceVideo = video ?? await uploadVideo(file);
-      setVideo(sourceVideo);
-      const outcomes = await Promise.allSettled(selectedProfiles.map(async (profile): Promise<ExportTask> => {
-        return createVideoExport(sourceVideo.id, profile.id, adaptationMode);
-      }));
-      const created = outcomes.flatMap((outcome) => outcome.status === 'fulfilled' ? [outcome.value] : []);
-      const failures = outcomes.filter((outcome) => outcome.status === 'rejected');
-      setExportJobs((current) => [...current, ...created]);
-
-      const hasActiveExports = created.some((task) =>
-        !['ready', 'failed', 'cancelled'].includes(task.status));
-      setProcessing(hasActiveExports);
-      if (failures.length) {
-        const firstFailure = failures[0];
-        setError(
-          `${failures.length} профиль(я) не удалось запустить. ${getErrorMessage(
-            firstFailure.status === 'rejected' ? firstFailure.reason : undefined,
-            'Проверьте выбранные профили и повторите попытку.',
-          )}`,
-        );
+      if (selectedProfiles.length) {
+        const outcomes = await Promise.allSettled(selectedProfiles.map(async (profile): Promise<ExportTask> => {
+          return createVideoExport(sourceVideo.id, profile.id, adaptationMode);
+        }));
+        const created = outcomes.flatMap((outcome) => outcome.status === 'fulfilled' ? [outcome.value] : []);
+        const failures = outcomes.filter((outcome) => outcome.status === 'rejected');
+        setExportJobs((current) => [...current, ...created]);
+        if (failures.length) {
+          const firstFailure = failures[0];
+          setError(
+            `${failures.length} профиль(я) экспорта не удалось запустить. ${getErrorMessage(
+              firstFailure.status === 'rejected' ? firstFailure.reason : undefined,
+              'Проверьте выбранные профили и повторите попытку.',
+            )}`,
+          );
+        }
       }
     } catch (requestError) {
-      setError(getErrorMessage(requestError, 'Не удалось запустить экспорт'));
+      setError(getErrorMessage(requestError, 'Ошибка при запуске обработки'));
       setProcessing(false);
     }
   };
@@ -440,18 +300,11 @@ export default function App() {
   const jobStatus = job?.status;
   useEffect(() => {
     if (!jobId) return;
-    if (jobStatus && ['completed', 'failed', 'cancelled'].includes(jobStatus)) {
-      setProcessing(false);
-      return;
-    }
+    if (jobStatus && ['completed', 'failed', 'cancelled'].includes(jobStatus)) return;
 
     const interval = window.setInterval(async () => {
       try {
-        const updated = await getJobStatus(jobId);
-        setJob(updated);
-        if (['completed', 'failed', 'cancelled'].includes(updated.status)) {
-          setProcessing(false);
-        }
+        setJob(await getJobStatus(jobId));
       } catch (pollError) {
         setError(getErrorMessage(pollError, 'Не удалось обновить состояние обработки'));
       }
@@ -487,9 +340,9 @@ export default function App() {
     return () => window.clearInterval(interval);
   }, [pendingExportIds]);
 
+  // The form stays locked until both the AI job and all export jobs finish.
   useEffect(() => {
-    const exportsAreDone = exportJobs.length > 0
-      && exportJobs.every((task) => ['ready', 'failed', 'cancelled'].includes(task.status));
+    const exportsAreDone = exportJobs.every((task) => ['ready', 'failed', 'cancelled'].includes(task.status));
     const jobIsDone = !job || ['completed', 'failed', 'cancelled'].includes(job.status);
     if (exportsAreDone && jobIsDone) setProcessing(false);
   }, [exportJobs, job]);
@@ -510,6 +363,21 @@ export default function App() {
 
   const tasks = useMemo<TaskView[]>(() => {
     const items: TaskView[] = [];
+    const exportTaskViews: TaskView[] = exportJobs.map((exportJob) => {
+      const exportProfile = EXPORT_PROFILES.find((profile) => profile.id === exportJob.profile_id);
+      return {
+        id: exportJob.id,
+        name: file?.name || `Экспорт ${exportJob.id.slice(0, 8)}`,
+        kind: exportProfile?.title || exportJob.profile_id,
+        status: exportJob.status,
+        progress: exportJob.progress,
+        message: exportJob.user_message || exportJob.error_code || undefined,
+        downloadUrl: exportJob.status === 'ready'
+          ? resolveApiUrl(`exports/${exportJob.id}/download`)
+          : undefined,
+        createdAt: exportJob.created_at,
+      };
+    });
     if (job) {
       const stepViews: StepProgressView[] = (job.steps ?? []).map((step, index) => ({
         type: step.type,
@@ -527,26 +395,14 @@ export default function App() {
         status: job.status,
         progress: job.progress ?? 0,
         steps: stepViews,
+        subtasks: exportTaskViews,
         message: job.error?.message || job.message,
         downloadUrl: result ? resolveApiUrl(result.download_url) : undefined,
         createdAt: job.created_at,
       });
+    } else {
+      items.push(...exportTaskViews);
     }
-    exportJobs.forEach((exportJob) => {
-      const exportProfile = EXPORT_PROFILES.find((profile) => profile.id === exportJob.profile_id);
-      items.push({
-        id: exportJob.id,
-        name: file?.name || `Экспорт ${exportJob.id.slice(0, 8)}`,
-        kind: exportProfile?.title || exportJob.profile_id,
-        status: exportJob.status,
-        progress: exportJob.progress,
-        message: exportJob.user_message || exportJob.error_code || undefined,
-        downloadUrl: exportJob.status === 'ready'
-          ? resolveApiUrl(`exports/${exportJob.id}/download`)
-          : undefined,
-        createdAt: exportJob.created_at,
-      });
-    });
     return items.sort((first, second) => second.createdAt.localeCompare(first.createdAt));
   }, [exportJobs, file?.name, job, jobStepTimings, result]);
 
@@ -591,18 +447,6 @@ export default function App() {
     ) : null;
   };
 
-  const setProfileOrientation = (aspectRatio: string) => {
-    setProfileIds(EXPORT_PROFILES
-      .filter((profile) => profile.aspectRatio === aspectRatio)
-      .map((profile) => profile.id));
-  };
-
-  const isOrientationSelected = (aspectRatio: string) => {
-    const matchingProfiles = EXPORT_PROFILES.filter((profile) => profile.aspectRatio === aspectRatio);
-    return selectedProfiles.length === matchingProfiles.length
-      && matchingProfiles.every((profile) => profileIds.includes(profile.id));
-  };
-
   const renderProcessView = () => (
     <>
       <NewProcess
@@ -615,127 +459,15 @@ export default function App() {
         setFps={setFps}
         processing={processing}
         hasPipelineSteps={hasPipelineSteps}
+        exportProfiles={EXPORT_PROFILES}
+        selectedProfileIds={profileIds}
+        setProfileIds={setProfileIds}
+        adaptationMode={adaptationMode}
+        setAdaptationMode={setAdaptationMode}
+        adaptationModes={ADAPTATION_MODES}
+        exportJobsCount={exportJobs.length}
         onStart={handleSubmit}
-        onOpenAdaptation={() => setView('adapt')}
       />
-      {renderWorkflowStatus()}
-    </>
-  );
-
-  const renderAdaptView = () => (
-    <>
-      <div className="welcome">
-        <div>
-          <span className="welcome-eyebrow">Экспорт</span>
-          <h2 className="welcome-title">Адаптация под платформу</h2>
-          <p className="welcome-sub">Создайте отдельный экспорт для каждого выбранного профиля платформы.</p>
-        </div>
-      </div>
-
-      <SourcePanel file={file} video={video} onFile={handleFile} disabled={processing} />
-
-      <section className="panel">
-        <div className="panel-head">
-          <h3>2. Профиль экспорта</h3>
-          <span className="muted-sm">Выберите одну или несколько платформ</span>
-        </div>
-        <div className="format-presets">
-          <span>Быстрый выбор ориентации</span>
-          <button
-            type="button"
-            className={isOrientationSelected('16:9') ? 'active' : ''}
-            onClick={() => setProfileOrientation('16:9')}
-            disabled={processing}
-          >
-            Альбомная, 16:9
-          </button>
-          <button
-            type="button"
-            className={isOrientationSelected('9:16') ? 'active' : ''}
-            onClick={() => setProfileOrientation('9:16')}
-            disabled={processing}
-          >
-            Книжная, 9:16
-          </button>
-        </div>
-        <p className="format-help">
-          Ориентация задаётся профилем экспорта. Способ вписывания изображения выберите ниже.
-        </p>
-        <div className="profile-options">
-          {EXPORT_PROFILES.map((profile) => (
-            <label
-              key={profile.id}
-              className={`profile-option${profileIds.includes(profile.id) ? ' selected' : ''}`}
-            >
-              <input
-                type="checkbox"
-                name="export-profile"
-                value={profile.id}
-                checked={profileIds.includes(profile.id)}
-                onChange={(event) => {
-                  setProfileIds((current) => event.target.checked
-                    ? [...current, profile.id]
-                    : current.filter((id) => id !== profile.id));
-                }}
-                disabled={processing}
-              />
-              <b>{profile.platform}</b>
-              <span>{profile.contentType}</span>
-              <span>{profile.dimensions}, {profile.aspectRatio}</span>
-            </label>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel">
-        <div className="panel-head">
-          <h3>3. Способ адаптации</h3>
-          <span className="muted-sm">Исходная частота кадров сохраняется</span>
-        </div>
-        <div className="mode-options">
-          {ADAPTATION_MODES.map((mode) => (
-            <label
-              key={mode.value}
-              className={`mode-option${adaptationMode === mode.value ? ' selected' : ''}`}
-            >
-              <input
-                type="radio"
-                name="adaptation-mode"
-                value={mode.value}
-                checked={adaptationMode === mode.value}
-                onChange={() => setAdaptationMode(mode.value)}
-                disabled={processing}
-              />
-              <b>{mode.label}</b>
-              <span>{mode.description}</span>
-            </label>
-          ))}
-        </div>
-        {adaptationMode === 'crop' && (
-          <div className="notice warning" style={{ marginTop: 14 }}>
-            При центральном кадрировании часть изображения может быть обрезана.
-          </div>
-        )}
-        <div className="panel-foot">
-          <div className="estimate">
-            {selectedProfiles.length
-              ? selectedProfiles.map((profile) => `${profile.title}, ${profile.dimensions}, ${profile.codec}`).join(', ')
-              : 'Выберите профиль экспорта'}
-          </div>
-          <button
-            className="btn btn-primary"
-            onClick={handleExportSubmit}
-            disabled={!file || processing}
-          >
-            {processing ? 'Экспорт…' : `Запустить экспорт${selectedProfiles.length > 1 ? `, ${selectedProfiles.length}` : ''}`}
-          </button>
-        </div>
-        {exportJobs.length > 0 && (
-          <div className="status-detail">
-            Экспортов в текущей сессии: {exportJobs.length}, каждая задача обрабатывается отдельно.
-          </div>
-        )}
-      </section>
       {renderWorkflowStatus()}
     </>
   );
@@ -773,8 +505,6 @@ export default function App() {
     switch (view) {
       case 'new':
         return renderProcessView();
-      case 'adapt':
-        return renderAdaptView();
       case 'projects':
         return renderProjects();
       case 'settings':

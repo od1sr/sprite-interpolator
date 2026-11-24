@@ -16,13 +16,36 @@ export default function NewProcess({
   setFps,
   processing,
   hasPipelineSteps,
+  exportProfiles,
+  selectedProfileIds,
+  setProfileIds,
+  adaptationMode,
+  setAdaptationMode,
+  adaptationModes,
+  exportJobsCount,
   onStart,
-  onOpenAdaptation,
 }) {
+  const selectedProfiles = exportProfiles.filter((profile) => selectedProfileIds.includes(profile.id));
+
   const getEstimate = () => {
     const upLabel = scale === 1 ? 'без апскейла' : `апскейл ${scale}×`;
     const fpsLabel = fps === 0 ? 'исходный FPS' : `${fps} FPS`;
-    return `В запрос уйдёт: ${upLabel}, ${fpsLabel}`;
+    const exportLabel = selectedProfiles.length
+      ? `, экспорт: ${selectedProfiles.length}`
+      : ', без экспорта';
+    return `В запрос уйдёт: ${upLabel}, ${fpsLabel}${exportLabel}`;
+  };
+
+  const setProfileOrientation = (aspectRatio) => {
+    setProfileIds(exportProfiles
+      .filter((profile) => profile.aspectRatio === aspectRatio)
+      .map((profile) => profile.id));
+  };
+
+  const isOrientationSelected = (aspectRatio) => {
+    const matchingProfiles = exportProfiles.filter((profile) => profile.aspectRatio === aspectRatio);
+    return selectedProfiles.length === matchingProfiles.length
+      && matchingProfiles.every((profile) => selectedProfileIds.includes(profile.id));
   };
 
   return (
@@ -31,7 +54,7 @@ export default function NewProcess({
         <div>
           <span className="welcome-eyebrow">Обработка</span>
           <h2 className="welcome-title">Новая обработка</h2>
-          <p className="welcome-sub">Загрузите видео и настройте пайплайн — обработка запустится через существующую очередь.</p>
+          <p className="welcome-sub">Загрузите видео, соберите пайплайн и настройте экспорт — всё запускается одной задачей.</p>
         </div>
       </div>
 
@@ -103,7 +126,6 @@ export default function NewProcess({
               <option value={120}>120 FPS</option>
             </select>
           </div>
-
         </div>
 
         <div className="panel-foot">
@@ -117,9 +139,98 @@ export default function NewProcess({
           </button>
         </div>
         {!hasPipelineSteps && <div className="notice">Выберите хотя бы один рабочий этап обработки.</div>}
-        <button className="btn btn-ghost" onClick={onOpenAdaptation} style={{ marginTop: 12 }}>
-          Подготовить экспорт для платформы
-        </button>
+      </div>
+
+      <div className="panel">
+        <div className="panel-head">
+          <h3>3. Экспорт</h3>
+          <span className="muted-sm">Необязательно, запускается вместе с обработкой</span>
+        </div>
+
+        <div className="format-presets">
+          <span>Быстрый выбор ориентации</span>
+          <button
+            type="button"
+            className={isOrientationSelected('16:9') ? 'active' : ''}
+            onClick={() => setProfileOrientation('16:9')}
+            disabled={processing}
+          >
+            Альбомная, 16:9
+          </button>
+          <button
+            type="button"
+            className={isOrientationSelected('9:16') ? 'active' : ''}
+            onClick={() => setProfileOrientation('9:16')}
+            disabled={processing}
+          >
+            Книжная, 9:16
+          </button>
+        </div>
+        <p className="format-help">
+          Ориентация задаётся профилем экспорта. Способ вписывания изображения выберите ниже.
+        </p>
+        <div className="profile-options">
+          {exportProfiles.map((profile) => (
+            <label
+              key={profile.id}
+              className={`profile-option${selectedProfileIds.includes(profile.id) ? ' selected' : ''}`}
+            >
+              <input
+                type="checkbox"
+                name="export-profile"
+                value={profile.id}
+                checked={selectedProfileIds.includes(profile.id)}
+                onChange={(event) => {
+                  setProfileIds((current) => event.target.checked
+                    ? [...current, profile.id]
+                    : current.filter((id) => id !== profile.id));
+                }}
+                disabled={processing}
+              />
+              <b>{profile.platform}</b>
+              <span>{profile.contentType}</span>
+              <span>{profile.dimensions}, {profile.aspectRatio}</span>
+            </label>
+          ))}
+        </div>
+
+        <div className="mode-options" style={{ marginTop: 16 }}>
+          {adaptationModes.map((mode) => (
+            <label
+              key={mode.value}
+              className={`mode-option${adaptationMode === mode.value ? ' selected' : ''}`}
+            >
+              <input
+                type="radio"
+                name="adaptation-mode"
+                value={mode.value}
+                checked={adaptationMode === mode.value}
+                onChange={() => setAdaptationMode(mode.value)}
+                disabled={processing}
+              />
+              <b>{mode.label}</b>
+              <span>{mode.description}</span>
+            </label>
+          ))}
+        </div>
+        {adaptationMode === 'crop' && (
+          <div className="notice warning" style={{ marginTop: 14 }}>
+            При центральном кадрировании часть изображения может быть обрезана.
+          </div>
+        )}
+
+        <div className="panel-foot">
+          <div className="estimate">
+            {selectedProfiles.length
+              ? selectedProfiles.map((profile) => `${profile.title}, ${profile.dimensions}, ${profile.codec}`).join(', ')
+              : 'Профили экспорта не выбраны'}
+          </div>
+        </div>
+        {exportJobsCount > 0 && (
+          <div className="status-detail">
+            Экспортов в текущей сессии: {exportJobsCount}, каждая задача обрабатывается отдельно.
+          </div>
+        )}
       </div>
     </div>
   );
