@@ -700,6 +700,11 @@ export default function App() {
     }} />;
   }
 
+  const handleLogout = () => {
+    logout();
+    setView('landing');
+  };
+
   return (
     <div id="appShell">
       <Sidebar
@@ -707,18 +712,19 @@ export default function App() {
         setView={(nextView: View) => setView(nextView)}
         user={user}
         getPlan={getPlan}
-        onLogout={() => {
-          logout();
-          setView('landing');
-        }}
       />
       <div className="app-main">
         <header className="topbar">
           <h1>{VIEW_TITLES[view]}</h1>
           <div className="topbar-actions">
-            <a className="btn btn-ghost btn-sm" href={resolveApiUrl('/docs')} target="_blank" rel="noreferrer">
-              Документация API
-            </a>
+            <button className="btn btn-ghost btn-sm" onClick={handleLogout}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />
+                <path d="M10 16l-4-4 4-4" />
+                <path d="M6 12h10" />
+              </svg>
+              Выйти
+            </button>
           </div>
         </header>
         <main className="content">

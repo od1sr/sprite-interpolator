@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function Sidebar({ currentView, setView, user, getPlan, onLogout }) {
+export default function Sidebar({ currentView, setView, user, getPlan }) {
   const initials = (user?.name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
   const plan = getPlan();
 
@@ -50,10 +50,6 @@ export default function Sidebar({ currentView, setView, user, getPlan, onLogout 
             </svg>
           </button>
         </div>
-        <button className="side-item" onClick={onLogout}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 16l-4-4 4-4"/><path d="M6 12h10"/></svg>
-          Выйти
-        </button>
       </div>
     </aside>
   );
