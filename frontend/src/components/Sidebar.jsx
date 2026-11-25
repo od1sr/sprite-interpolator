@@ -1,8 +1,23 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 export default function Sidebar({ currentView, setView, user, getPlan }) {
   const initials = (user?.name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
   const plan = getPlan();
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('zarya.sidebar.collapsed') === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('zarya.sidebar.collapsed', collapsed ? '1' : '0');
+    } catch {
+      // Ignore storage errors — collapsing still works for this session.
+    }
+  }, [collapsed]);
 
   const settingsIcon = (
     <>
@@ -20,23 +35,40 @@ export default function Sidebar({ currentView, setView, user, getPlan }) {
   ];
 
   return (
-    <aside className="sidebar">
-      <div className="brand side-brand"><span className="brand-mark"></span><span>Zarya</span></div>
+    <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
+      <div className="side-top">
+        <div className="brand side-brand">
+          <span className="brand-mark"></span>
+          <span className="brand-text">Zarya</span>
+        </div>
+        <button
+          className="side-toggle"
+          onClick={() => setCollapsed((value) => !value)}
+          title={collapsed ? 'Развернуть меню' : 'Свернуть меню'}
+          aria-label={collapsed ? 'Развернуть меню' : 'Свернуть меню'}
+          aria-expanded={!collapsed}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            {collapsed ? <path d="M9 6l6 6-6 6" /> : <path d="M15 6l-6 6 6 6" />}
+          </svg>
+        </button>
+      </div>
       <div className="side-label">Рабочее пространство</div>
       {menuItems.map(item => (
         <button
           key={item.id}
           className={`side-item ${item.mobileOnly ? 'mobile-only' : ''} ${currentView === item.id ? 'active' : ''}`}
           onClick={() => setView(item.id)}
+          title={collapsed ? item.label : undefined}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
             {typeof item.icon === 'string' ? <path d={item.icon}/> : item.icon}
           </svg>
-          {item.label}
+          <span className="side-item-label">{item.label}</span>
         </button>
       ))}
       <div className="side-foot">
-        <div className="user-chip">
+        <div className="user-chip" title={`${user?.name || 'Пользователь'} · Тариф ${plan.name}`}>
           <div className="avatar sm">{initials}</div>
           <div className="uc-info"><b>{user?.name}</b><span>Тариф {plan.name}</span></div>
           <button

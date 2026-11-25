@@ -6,6 +6,7 @@ const TABS = [
   { id: 'run', label: 'В обработке' },
   { id: 'done', label: 'Готово' },
   { id: 'err', label: 'Ошибка' },
+  { id: 'cancel', label: 'Отменено' },
 ];
 
 export default function Projects({ filter, onFilterChange }) {

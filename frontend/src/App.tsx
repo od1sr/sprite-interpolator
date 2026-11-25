@@ -152,6 +152,7 @@ const STATUS_LABELS: Record<string, string> = {
 function taskFilter(status: string): string {
   if (status === 'ready' || status === 'completed') return 'done';
   if (status === 'failed') return 'err';
+  if (status === 'cancelled' || status === 'cancelling') return 'cancel';
   if (status === 'queued') return 'queue';
   return 'run';
 }
@@ -175,7 +176,7 @@ function SubtaskRow({ task }: { task: TaskView }) {
     <div className="proj-subtask">
       <div className="proj-subtask-main">
         <div className="proj-name">
-          <span title={task.name}>{task.name}</span>
+          <span className="truncate" title={task.name}>{task.name}</span>
           <span className={`pill ${tone}`}>{STATUS_LABELS[task.status] || task.status}</span>
         </div>
         <div className="proj-meta">
@@ -217,7 +218,7 @@ function TaskRow({
       <div className="thumb" aria-hidden="true" />
       <div className="proj-main">
         <div className="proj-name">
-          <span title={task.name}>{task.name}</span>
+          <span className="truncate" title={task.name}>{task.name}</span>
           <span className={`pill ${tone}`}>{STATUS_LABELS[task.status] || task.status}</span>
         </div>
         <div className="proj-meta">

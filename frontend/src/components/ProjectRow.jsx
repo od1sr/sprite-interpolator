@@ -40,7 +40,10 @@ export default function ProjectRow({ project }) {
     <div className="proj" data-status={project.status}>
       <div className="thumb" style={{'--h': project.hue}}></div>
       <div className="proj-main">
-        <div className="proj-name">{project.name} <span className={pillClass}>{pillText}</span></div>
+        <div className="proj-name">
+          <span className="truncate" title={project.name}>{project.name}</span>
+          <span className={pillClass}>{pillText}</span>
+        </div>
         <div className="proj-meta">{project.meta}</div>
       </div>
       <div className="proj-bar">
@@ -83,7 +86,7 @@ export default function ProjectRow({ project }) {
       </div>
       {detailsOpen && (
         <div className="project-details" role="region" aria-label={`Сведения о проекте ${project.name}`}>
-          <strong>{project.name}</strong>
+          <strong className="truncate" title={project.name}>{project.name}</strong>
           <p>Статус: {pillText}</p>
           <p>{project.meta}</p>
           <p>Готовность: {isErr ? '—' : `${Math.round(project.progress)}%`}</p>
