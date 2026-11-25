@@ -123,6 +123,50 @@ def test_create_job_validates_pipeline_and_enqueues(client, monkeypatch):
         assert len(session.scalars(select(Job)).all()) == 1
 
 
+def test_create_job_rejects_unsupported_fps_multiplier(client, monkeypatch):
+    test_client, sessions = client
+    from app import api
+
+    monkeypatch.setattr(api.process_job, "apply_async", lambda args: None)
+    monkeypatch.setattr(
+        api,
+        "probe_video",
+        lambda _: {
+            "duration_seconds": 2.5,
+            "width": 1280,
+            "height": 720,
+            "fps": 12.0,
+            "codec": "h264",
+        },
+    )
+    video = test_client.post(
+        "/api/v1/videos",
+        files={"file": ("source12.mp4", b"test video content", "video/mp4")},
+    ).json()
+
+    response = test_client.post(
+        "/api/v1/jobs",
+        json={
+            "video_id": video["id"],
+            "steps": [{"type": "interpolate", "parameters": {"target_fps": 60}}],
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert response.json()["error"]["details"]["allowed_target_fps"] == [24.0, 48.0, 96.0, 192.0]
+    with sessions() as session:
+        assert session.scalar(select(Job)) is None
+
+    valid = test_client.post(
+        "/api/v1/jobs",
+        json={
+            "video_id": video["id"],
+            "steps": [{"type": "interpolate", "parameters": {"target_fps": 96}}],
+        },
+    )
+    assert valid.status_code == 202
+
+
 def test_queue_failure_returns_503_and_removes_unqueued_job(client, monkeypatch):
     test_client, sessions = client
     video_id = upload(test_client, monkeypatch).json()["id"]
@@ -334,6 +378,35 @@ def test_create_export_enqueues_and_returns_backend_status(client, monkeypatch):
     polled = test_client.get(f"/api/v1/exports/{export['id']}")
     assert polled.status_code == 200
     assert polled.json()["id"] == export["id"]
+
+
+def test_create_export_waits_for_linked_processing_job(client, monkeypatch):
+    test_client, sessions = client
+    video_id = upload(test_client, monkeypatch).json()["id"]
+    from app import api
+
+    monkeypatch.setattr(api.process_job, "apply_async", lambda args: None)
+    job_id = test_client.post(
+        "/api/v1/jobs",
+        json={
+            "video_id": video_id,
+            "steps": [{"type": "interpolate", "parameters": {"target_fps": 60}}],
+        },
+    ).json()["id"]
+
+    enqueued = []
+    monkeypatch.setattr(api.process_export_job, "apply_async", lambda args: enqueued.append(args))
+    payload = {"profile_id": "youtube_standard_v1", "adaptation_mode": "crop", "job_id": job_id}
+    pending = test_client.post(f"/api/v1/videos/{video_id}/exports", json=payload)
+    assert pending.status_code == 202
+    assert pending.json()["status"] == "queued"
+    assert enqueued == []
+
+    with sessions.begin() as session:
+        session.get(Job, UUID(job_id)).status = "completed"
+    ready = test_client.post(f"/api/v1/videos/{video_id}/exports", json=payload)
+    assert ready.status_code == 202
+    assert enqueued == [[ready.json()["id"]]]
 
 
 def test_export_queue_failure_does_not_leave_a_queued_record(client, monkeypatch):

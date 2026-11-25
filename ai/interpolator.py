@@ -119,21 +119,22 @@ class VideoInterpolator:
                 f"target_fps ({target_fps}) must be >= source_fps ({source_fps:.2f})"
             )
 
-        if factor & (factor - 1) != 0:
+        supported = (1, 2, 4, 8, 16)
+        if factor not in supported:
+            choices = ", ".join(f"{source_fps * multiplier:.2f}" for multiplier in supported)
             cap.release()
             raise ValueError(
-                f"target_fps / source_fps = {factor}x is not a power of 2. "
-                f"Supported multipliers: 1, 2, 4, 8, 16. "
-                f"For source {source_fps:.2f} fps use target_fps in: "
-                f"{source_fps:.2f}, {source_fps*2:.2f}, {source_fps*4:.2f}, {source_fps*8:.2f}"
+                f"target_fps / source_fps = {factor}x is not a supported multiplier. "
+                f"Supported multipliers: {', '.join(str(item) for item in supported)}. "
+                f"For source {source_fps:.2f} fps use target_fps in: {choices}"
             )
 
-        if factor == 1 and abs(target_fps - source_fps) > 1.0:
+        if factor == 1 and abs(target_fps - source_fps) > 0.1:
             cap.release()
             raise ValueError(
                 f"Source is {source_fps:.2f} fps, target {target_fps:.2f} fps — "
                 f"ratio rounds to 1x (no interpolation). "
-                f"Pick {source_fps:.2f} or {source_fps*2:.2f} / {source_fps*4:.2f} / {source_fps*8:.2f}"
+                f"Pick one of the suggested target_fps values above."
             )
 
         level = int(math.log2(factor)) if factor > 1 else 0

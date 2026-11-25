@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Dropzone from '../components/Dropzone';
 
 const SCALE_OPTIONS = [
@@ -7,11 +7,21 @@ const SCALE_OPTIONS = [
   { value: 4, label: '4×' },
 ];
 
-const FPS_OPTIONS = [
-  { value: 0, label: 'Не применять' },
-  { value: 60, label: '60 FPS' },
-  { value: 120, label: '120 FPS' },
-];
+const FPS_MULTIPLIERS = [2, 4, 8, 16];
+const MAX_TARGET_FPS = 120;
+
+function buildFpsOptions(sourceFps) {
+  const options = [{ value: 0, label: 'Не применять' }];
+  const fps = Number(sourceFps);
+  if (!Number.isFinite(fps) || fps <= 0) return options;
+
+  for (const multiplier of FPS_MULTIPLIERS) {
+    const target = Number((fps * multiplier).toFixed(3));
+    if (target > MAX_TARGET_FPS) break;
+    options.push({ value: target, label: `${target.toFixed(1)} FPS` });
+  }
+  return options;
+}
 
 function formatBytes(bytes) {
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(0)} КБ`;
@@ -167,6 +177,20 @@ export default function NewProcess({
   exportJobsCount,
   onStart,
 }) {
+  const sourceFps = video?.fps;
+  const fpsOptions = useMemo(() => buildFpsOptions(sourceFps), [sourceFps]);
+  const previousSourceFps = useRef(null);
+
+  useEffect(() => {
+    const sourceChanged = Boolean(sourceFps) && previousSourceFps.current !== sourceFps;
+    previousSourceFps.current = sourceFps || null;
+
+    const hasCurrentOption = fpsOptions.some((option) => option.value === fps);
+    if (!hasCurrentOption || (sourceChanged && fps === 0)) {
+      setFps(fpsOptions[1]?.value ?? 0);
+    }
+  }, [fpsOptions, fps, sourceFps, setFps]);
+
   return (
     <div>
       <div className="welcome">
@@ -257,7 +281,7 @@ export default function NewProcess({
             <StyledSelect
               label="Целевая частота кадров"
               value={fps}
-              options={FPS_OPTIONS}
+              options={fpsOptions}
               onChange={setFps}
               disabled={processing}
             />

@@ -1,4 +1,5 @@
 import logging
+import math
 import shutil
 import stat
 from collections import defaultdict
@@ -34,6 +35,37 @@ from app.worker import process_export_job, process_job
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1")
 ACTIVE_STATUSES = {"queued", "processing", "cancelling"}
+SUPPORTED_FPS_MULTIPLIERS = (1, 2, 4, 8, 16)
+
+
+def _validate_interpolate_steps(video: Video, steps: list) -> None:
+    """Reject target FPS values the AI interpolator cannot produce."""
+    source_fps = video.fps
+    if source_fps is None or not math.isfinite(source_fps) or source_fps <= 0:
+        return
+
+    for step in steps:
+        if step.type != "interpolate":
+            continue
+        target_fps = step.parameters["target_fps"]
+        ratio = target_fps / source_fps
+        factor = round(ratio)
+        if factor not in SUPPORTED_FPS_MULTIPLIERS or abs(ratio - factor) > 0.01:
+            choices = [
+                round(source_fps * multiplier, 3)
+                for multiplier in SUPPORTED_FPS_MULTIPLIERS
+                if multiplier > 1
+            ]
+            raise APIError(
+                422,
+                "VALIDATION_ERROR",
+                "Недопустимая целевая частота кадров для исходного видео",
+                {
+                    "source_fps": round(source_fps, 3),
+                    "target_fps": target_fps,
+                    "allowed_target_fps": choices,
+                },
+            )
 
 
 def _video_path(video: Video) -> Path:
@@ -287,6 +319,7 @@ def create_job(payload: JobCreate, session: Session = Depends(get_session)) -> J
         _raise_not_found("video")
     if not _video_path(video).is_file():
         raise APIError(409, "INVALID_STATE", "Исходный файл больше недоступен")
+    _validate_interpolate_steps(video, payload.steps)
     job = _new_job(payload.video_id, [step.model_dump() for step in payload.steps], "Задача добавлена в очередь")
     session.add(job)
     session.commit()
@@ -540,6 +573,7 @@ def create_export(
     if not _video_path(video).is_file():
         raise APIError(409, "INVALID_STATE", "Исходный файл больше недоступен")
 
+    source_job = None
     if payload.job_id is not None:
         source_job = session.get(Job, payload.job_id)
         if source_job is None or source_job.video_id != video_id:
@@ -564,10 +598,21 @@ def create_export(
         adaptation_mode=payload.adaptation_mode,
         status="queued",
     )
+
+    # Exports linked to a processing job must use its result, not the source
+    # video. Wait until that job finishes; the worker enqueues them afterwards.
+    enqueue_now = payload.job_id is None or source_job.status == "completed"
+    if source_job is not None and source_job.status in {"failed", "cancelled"}:
+        job.status = "cancelled"
+        job.user_message = "Обработка видео не завершилась"
+        job.finished_at = datetime.now(timezone.utc)
+        enqueue_now = False
+
     session.add(job)
     session.commit()
     session.refresh(job)
-    _enqueue_export_job(session, job)
+    if enqueue_now:
+        _enqueue_export_job(session, job)
     return job
 
 

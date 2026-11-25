@@ -297,7 +297,7 @@ export default function App() {
   const [job, setJob] = useState<Job | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [scale, setScale] = useState<number>(2);
-  const [fps, setFps] = useState<number>(60);
+  const [fps, setFps] = useState<number>(0);
   const [profileIds, setProfileIds] = useState<string[]>([EXPORT_PROFILES[0].id]);
   const [adaptationMode, setAdaptationMode] = useState<AdaptationMode>('crop');
   const [processing, setProcessing] = useState(false);

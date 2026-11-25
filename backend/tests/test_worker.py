@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
-from app.models import ExportJob, Job, Video
+from app.models import ExportJob, Job, Result, Video
 
 
 @pytest.fixture
@@ -249,3 +249,53 @@ def test_export_worker_runs_ffmpeg_and_persists_download_path(worker_context, mo
         assert export.progress == 100
         assert export.output_path == f"exports/{export_id}/result.mp4"
         assert (root / export.output_path).read_bytes() == b"adapted"
+
+
+def test_export_worker_uses_linked_job_result(worker_context, monkeypatch):
+    worker, sessions, root, job_id = worker_context
+    export_id = uuid4()
+    result_key = f"results/{job_id}/result.mp4"
+    result_path = root / result_key
+    result_path.parent.mkdir(parents=True)
+    result_path.write_bytes(b"processed")
+
+    with sessions.begin() as session:
+        video = session.scalar(select(Video))
+        session.add(
+            Result(
+                id=uuid4(),
+                job_id=job_id,
+                filename="result.mp4",
+                content_type="video/mp4",
+                size_bytes=len(b"processed"),
+                duration_seconds=2.5,
+                width=1280,
+                height=720,
+                fps=96,
+                storage_key=result_key,
+            )
+        )
+        session.add(
+            ExportJob(
+                id=export_id,
+                video_id=video.id,
+                job_id=job_id,
+                profile_id="youtube_standard_v1",
+                config_snapshot={},
+                adaptation_mode="crop",
+                status="queued",
+            )
+        )
+
+    seen = []
+
+    def fake_export(input_path, output_path, config, mode):
+        seen.append(input_path.read_bytes())
+        output_path.write_bytes(b"adapted")
+
+    monkeypatch.setattr(worker, "run_ffmpeg_export", fake_export)
+    worker.process_export_job.run(str(export_id))
+
+    assert seen == [b"processed"]
+    with sessions() as session:
+        assert session.get(ExportJob, export_id).status == "ready"

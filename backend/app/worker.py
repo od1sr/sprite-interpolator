@@ -93,6 +93,27 @@ def _raise_if_cancelled(job_id: UUID) -> None:
             raise JobCancelled
 
 
+def _enqueue_pending_exports(job_id: UUID) -> None:
+    """Start exports that were waiting for this job's processed result."""
+    with SessionLocal() as session:
+        exports = session.scalars(
+            select(ExportJob).where(
+                ExportJob.job_id == job_id,
+                ExportJob.status == "queued",
+            )
+        ).all()
+        for export in exports:
+            try:
+                process_export_job.apply_async(args=[str(export.id)])
+            except Exception:
+                logger.exception("Failed to enqueue export %s", export.id)
+                export.status = "failed"
+                export.error_code = "SERVICE_UNAVAILABLE"
+                export.user_message = "Очередь экспорта недоступна"
+                export.finished_at = _now()
+        session.commit()
+
+
 def _update_step(job_id: UUID, index: int, *, status: str, progress: float, error: dict[str, Any] | None = None) -> None:
     with SessionLocal.begin() as session:
         job = session.scalar(select(Job).where(Job.id == job_id))
@@ -305,6 +326,7 @@ def process_job(_: Any, job_id: str) -> None:
             current.progress = 100
             current.message = "Обработка завершена"
             current.finished_at = _now()
+        _enqueue_pending_exports(parsed_id)
         _cleanup_work_dir(work_dir)
     except JobCancelled:
         _cleanup_work_dir(work_dir)
@@ -376,6 +398,22 @@ def process_export_job(_: Any, export_job_id: str) -> None:
         session.commit()
 
         input_path = settings.storage_root / video.storage_key
+        if job.job_id is not None:
+            result = session.scalar(select(Result).where(Result.job_id == job.job_id))
+            result_path = (
+                settings.storage_root / result.storage_key
+                if result is not None
+                else None
+            )
+            if result_path is None or not result_path.is_file():
+                job.status = "failed"
+                job.error_code = "RESULT_NOT_FOUND"
+                job.user_message = "Обработанное видео недоступно"
+                job.finished_at = _now()
+                session.commit()
+                return
+            input_path = result_path
+
         output_dir = settings.storage_root / "exports" / str(job.id)
         output_path = output_dir / "result.mp4"
 
