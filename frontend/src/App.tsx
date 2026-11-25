@@ -149,6 +149,13 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: 'Отменено',
 };
 
+function taskFilter(status: string): string {
+  if (status === 'ready' || status === 'completed') return 'done';
+  if (status === 'failed') return 'err';
+  if (status === 'queued') return 'queue';
+  return 'run';
+}
+
 const STEP_LABELS: Record<string, string> = {
   upscale: 'Апскейл',
   interpolate: 'Интерполяция',
@@ -283,6 +290,7 @@ function TaskRow({
 export default function App() {
   const { user, isLoading, login, register, logout, getPlan, updateProfile } = useAuth();
   const [view, setView] = useState<View>('landing');
+  const [projectFilter, setProjectFilter] = useState('all');
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [file, setFile] = useState<File | null>(null);
   const [video, setVideo] = useState<Video | null>(null);
@@ -652,13 +660,15 @@ export default function App() {
 
   const renderProjects = () => (
     <>
-      <Projects projects={projectsForUi} />
-      {tasks.length > 0 && (
-        <section className="panel">
-          <div className="panel-head"><h3>Текущие задачи</h3></div>
-          {renderTaskList(tasks)}
-        </section>
-      )}
+      <Projects filter={projectFilter} onFilterChange={setProjectFilter} />
+      <section className="panel">
+        <div className="panel-head"><h3>Текущие задачи</h3></div>
+        {renderTaskList(
+          projectFilter === 'all'
+            ? tasks
+            : tasks.filter((task) => taskFilter(task.status) === projectFilter),
+        )}
+      </section>
     </>
   );
 

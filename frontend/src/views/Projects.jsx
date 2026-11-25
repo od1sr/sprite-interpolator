@@ -1,21 +1,14 @@
-import React, { useState } from 'react';
-import ProjectRow from '../components/ProjectRow';
+import React from 'react';
 
-export default function Projects({ projects }) {
-  const [filter, setFilter] = useState('all');
+const TABS = [
+  { id: 'all', label: 'Все' },
+  { id: 'queue', label: 'В очереди' },
+  { id: 'run', label: 'В обработке' },
+  { id: 'done', label: 'Готово' },
+  { id: 'err', label: 'Ошибка' },
+];
 
-  const filteredProjects = filter === 'all' 
-    ? projects 
-    : projects.filter(p => p.status === filter);
-
-  const tabs = [
-    { id: 'all', label: 'Все' },
-    { id: 'queue', label: 'В очереди' },
-    { id: 'run', label: 'В обработке' },
-    { id: 'done', label: 'Готово' },
-    { id: 'err', label: 'Ошибка' },
-  ];
-
+export default function Projects({ filter, onFilterChange }) {
   return (
     <div>
       <div className="welcome">
@@ -27,25 +20,15 @@ export default function Projects({ projects }) {
       </div>
 
       <div className="tabs">
-        {tabs.map(tab => (
-          <button 
-            key={tab.id} 
+        {TABS.map(tab => (
+          <button
+            key={tab.id}
             className={`tab ${filter === tab.id ? 'active' : ''}`}
-            onClick={() => setFilter(tab.id)}
+            onClick={() => onFilterChange(tab.id)}
           >
             {tab.label}
           </button>
         ))}
-      </div>
-
-      <div className="panel">
-        <div className="proj-list">
-          {filteredProjects.length > 0 ? (
-            filteredProjects.map(p => <ProjectRow key={p.id} project={p} />)
-          ) : (
-            <div className="empty">Нет проектов в этой категории</div>
-          )}
-        </div>
       </div>
     </div>
   );
