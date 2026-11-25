@@ -304,7 +304,8 @@ export default function NewProcess({
           ))}
         </div>
 
-        <div className="mode-options" style={{ marginTop: 16 }}>
+        <p className="format-help mode-help">Выберите способ обрезки видео</p>
+        <div className="mode-options">
           {adaptationModes.map((mode) => (
             <label
               key={mode.value}
