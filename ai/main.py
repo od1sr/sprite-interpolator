@@ -196,7 +196,9 @@ def color_correct(request_data: dict):
         return _error(400, "bad_params", "mode must be preset or smart")
     preset = params.get("preset")
     if mode == "preset":
-        if not isinstance(preset, str) or preset not in COLOR_PRESETS:
+        if preset not in (None, "") and (
+            not isinstance(preset, str) or preset not in COLOR_PRESETS
+        ):
             return _error(
                 400, "bad_params",
                 f"unknown color preset: {preset}. Available: {', '.join(COLOR_PRESETS)}",
@@ -204,9 +206,22 @@ def color_correct(request_data: dict):
     elif preset is not None:
         return _error(400, "bad_params", "preset is not allowed in smart mode")
 
+    sharpness = params.get("sharpness", 0)
+    if (
+        isinstance(sharpness, bool)
+        or not isinstance(sharpness, (int, float))
+        or not 0 <= sharpness <= 100
+    ):
+        return _error(400, "bad_params", "sharpness must be between 0 and 100")
+
     try:
         return VideoColorCorrector().process(
-            input_uri, output_uri, mode=mode, preset=preset, cancel_uri=cancel_uri
+            input_uri,
+            output_uri,
+            mode=mode,
+            preset=preset,
+            sharpness=sharpness,
+            cancel_uri=cancel_uri,
         )
     except ProcessingCancelled:
         return _error(409, "cancelled", "Обработка отменена")
@@ -238,8 +253,16 @@ def color_preview(request_data: dict):
     elif preset is not None:
         return _error(400, "bad_params", "preset is not allowed in smart mode")
 
+    sharpness = params.get("sharpness", 0)
+    if (
+        isinstance(sharpness, bool)
+        or not isinstance(sharpness, (int, float))
+        or not 0 <= sharpness <= 100
+    ):
+        return _error(400, "bad_params", "sharpness must be between 0 and 100")
+
     try:
-        before, after = make_preview_frames(input_uri, mode, preset)
+        before, after = make_preview_frames(input_uri, mode, preset, sharpness)
         def encode(frame) -> str:
             ok, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 88])
             if not ok:

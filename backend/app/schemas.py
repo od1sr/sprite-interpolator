@@ -74,20 +74,28 @@ class StepInput(BaseModel):
             mode = parameters.get("mode")
             if mode not in ("preset", "smart"):
                 raise ValueError("mode должен быть preset или smart")
-            if mode == "smart":
-                if set(parameters) != {"mode"}:
-                    raise ValueError("Для умной коррекции требуется только mode")
-            else:
+            allowed = {"mode", "sharpness"}
+            if mode == "preset":
+                allowed.add("preset")
+            if set(parameters) - allowed:
+                raise ValueError("Недопустимые параметры color_correct")
+            sharpness = parameters.get("sharpness", 0)
+            if (
+                isinstance(sharpness, bool)
+                or not isinstance(sharpness, int)
+                or not 0 <= sharpness <= 100
+            ):
+                raise ValueError("Резкость должна быть целым числом от 0 до 100")
+            if mode == "preset":
                 preset = parameters.get("preset")
-                if (
-                    set(parameters) != {"mode", "preset"}
-                    or not isinstance(preset, str)
-                    or preset not in COLOR_PRESETS
-                ):
-                    raise ValueError(
-                        "Недопустимый пресет коррекции цвета. "
-                        f"Допустимые пресеты: {', '.join(COLOR_PRESETS)}"
-                    )
+                if preset is not None:
+                    if not isinstance(preset, str) or preset not in COLOR_PRESETS:
+                        raise ValueError(
+                            "Недопустимый пресет коррекции цвета. "
+                            f"Допустимые пресеты: {', '.join(COLOR_PRESETS)}"
+                        )
+                elif sharpness <= 0:
+                    raise ValueError("Требуется пресет коррекции или резкость")
         elif step_type == "format":
             if set(parameters) != {"platform", "resolution"}:
                 raise ValueError("Для format требуются параметры platform и resolution")
@@ -101,6 +109,7 @@ class StepInput(BaseModel):
 class ColorPreviewRequest(BaseModel):
     mode: Literal["preset", "smart"] = "preset"
     preset: str | None = None
+    sharpness: int = Field(default=0, ge=0, le=100)
 
 
 class JobCreate(BaseModel):

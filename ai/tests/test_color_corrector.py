@@ -13,7 +13,12 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from color_corrector import PRESETS, build_preset_lut, build_smart_lut  # noqa: E402
+from color_corrector import (  # noqa: E402
+    PRESETS,
+    apply_sharpness,
+    build_preset_lut,
+    build_smart_lut,
+)
 
 
 class FakeCapture:
@@ -66,6 +71,14 @@ class ColorCorrectorTests(unittest.TestCase):
         self.assertEqual(lut.shape, (1, 256, 3))
         self.assertIsNotNone(matrix)
         self.assertLess(int(lut[0, 128, 2]), int(lut[0, 128, 0]))
+
+    def test_sharpness_zero_is_neutral_and_positive_changes_edges(self):
+        frame = np.zeros((64, 64, 3), dtype=np.uint8)
+        frame[:, 32:] = 200
+        self.assertTrue(np.array_equal(apply_sharpness(frame, 0), frame))
+        sharpened = apply_sharpness(frame, 60)
+        self.assertEqual(sharpened.shape, frame.shape)
+        self.assertGreater(int(np.abs(sharpened.astype(int) - frame.astype(int)).max()), 0)
 
 
 if __name__ == "__main__":

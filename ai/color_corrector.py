@@ -79,11 +79,30 @@ def _saturation_matrix(saturation: float) -> np.ndarray:
     return matrix
 
 
-def apply_correction(frame: np.ndarray, lut: np.ndarray, matrix: np.ndarray | None) -> np.ndarray:
-    """Apply the global saturation matrix and LUT to one frame."""
+SHARPNESS_MAX_STRENGTH = 20.0
+
+
+def apply_sharpness(frame: np.ndarray, sharpness: int | float) -> np.ndarray:
+    """Unsharp mask using only OpenCV — no extra models or dependencies."""
+    amount = SHARPNESS_MAX_STRENGTH * float(sharpness or 0) / 100.0
+    if amount <= 0:
+        return frame
+    blurred = cv2.GaussianBlur(frame, (0, 0), 1.0)
+    return cv2.addWeighted(frame, 1.0 + amount, blurred, -amount, 0)
+
+
+def apply_correction(
+    frame: np.ndarray,
+    lut: np.ndarray | None,
+    matrix: np.ndarray | None,
+    sharpness: int | float = 0,
+) -> np.ndarray:
+    """Apply saturation, the global LUT and optional sharpening to one frame."""
     if matrix is not None:
         frame = cv2.transform(frame, matrix)
-    return cv2.LUT(frame, lut)
+    if lut is not None:
+        frame = cv2.LUT(frame, lut)
+    return apply_sharpness(frame, sharpness)
 
 
 def build_preset_lut(preset: str) -> tuple[np.ndarray, np.ndarray | None]:
@@ -155,13 +174,17 @@ def build_correction(
             return build_smart_lut(sample_cap)
         finally:
             sample_cap.release()
-    return build_preset_lut(preset or "natural")
+    # No preset means neutral colour; sharpness is applied separately.
+    if not preset:
+        return None, None
+    return build_preset_lut(preset)
 
 
 def make_preview_frames(
     input_path: str,
     mode: str,
     preset: str | None,
+    sharpness: int | float = 0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Read one representative frame and return it before/after correction."""
     cap = cv2.VideoCapture(input_path)
@@ -181,10 +204,8 @@ def make_preview_frames(
     if not ok:
         raise ValueError("Video has no decodable frames")
 
-    if mode == "preset" and not preset:
-        return before, before.copy()
-    lut, matrix = build_correction(input_path, mode, preset)
-    return before, apply_correction(before, lut, matrix)
+    lut, matrix = build_correction(input_path, mode, preset if mode == "preset" else None)
+    return before, apply_correction(before, lut, matrix, sharpness)
 
 
 class VideoColorCorrector:
@@ -194,19 +215,21 @@ class VideoColorCorrector:
         output_path: str,
         mode: str = "preset",
         preset: str | None = None,
+        sharpness: int | float = 0,
         cancel_uri: str | None = None,
     ) -> dict:
         if mode not in ("preset", "smart"):
             raise ValueError("mode must be preset or smart")
-        if mode == "preset" and preset not in PRESETS:
+        if mode == "preset" and preset is not None and preset not in PRESETS:
             raise ValueError(f"unknown color preset: {preset}")
         if is_cancelled(cancel_uri):
             raise ProcessingCancelled("Обработка отменена")
 
         logger.info(
-            "ColorCorrector.start: mode=cpu, dtype=uint8, correction=%s, preset=%s",
+            "ColorCorrector.start: mode=cpu, dtype=uint8, correction=%s, preset=%s, sharpness=%s",
             mode,
             preset if mode == "preset" else "auto",
+            sharpness,
         )
 
         cap = cv2.VideoCapture(input_path)
@@ -221,7 +244,7 @@ class VideoColorCorrector:
             cap.release()
             raise ValueError("Source FPS is zero")
 
-        lut, matrix = build_correction(input_path, mode, preset)
+        lut, matrix = build_correction(input_path, mode, preset if mode == "preset" else None)
 
         output = Path(output_path)
         silent_path = output.with_name(f".{output.stem}.silent{output.suffix}")
@@ -237,7 +260,7 @@ class VideoColorCorrector:
                 ok, frame = cap.read()
                 if not ok:
                     break
-                out.write(apply_correction(frame, lut, matrix))
+                out.write(apply_correction(frame, lut, matrix, sharpness))
                 processed += 1
                 if processed % report_every == 0:
                     write_progress(output_path, processed, total_frames)

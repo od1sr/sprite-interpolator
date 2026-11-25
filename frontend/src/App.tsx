@@ -299,6 +299,7 @@ export default function App() {
   const [fps, setFps] = useState<number>(0);
   const [colorPreset, setColorPreset] = useState('');
   const [smartColor, setSmartColor] = useState(false);
+  const [sharpness, setSharpness] = useState(0);
   const [profileIds, setProfileIds] = useState<string[]>([EXPORT_PROFILES[0].id]);
   const [adaptationMode, setAdaptationMode] = useState<AdaptationMode>('crop');
   const [processing, setProcessing] = useState(false);
@@ -308,7 +309,7 @@ export default function App() {
   const uploadSequence = useRef(0);
 
   const selectedProfiles = EXPORT_PROFILES.filter((profile) => profileIds.includes(profile.id));
-  const hasPipelineSteps = scale > 1 || fps > 0 || smartColor || Boolean(colorPreset);
+  const hasPipelineSteps = scale > 1 || fps > 0 || smartColor || Boolean(colorPreset) || sharpness > 0;
 
   const handleFile = (selectedFile: File) => {
     const token = ++uploadSequence.current;
@@ -317,6 +318,7 @@ export default function App() {
     setJob(null);
     setColorPreset('');
     setSmartColor(false);
+    setSharpness(0);
     setProcessing(false);
     setUploading(true);
     setError(null);
@@ -351,10 +353,14 @@ export default function App() {
       if (fps > 0) steps.push({ type: 'interpolate', parameters: { target_fps: Number(fps) } });
       if (scale > 1) steps.push({ type: 'upscale', parameters: { scale: Number(scale) } });
       // Color correction is always the last step of the pipeline.
-      if (smartColor) {
-        steps.push({ type: 'color_correct', parameters: { mode: 'smart' } });
-      } else if (colorPreset) {
-        steps.push({ type: 'color_correct', parameters: { mode: 'preset', preset: colorPreset } });
+      if (smartColor || colorPreset || sharpness > 0) {
+        const colorParameters: Record<string, number | string> = smartColor
+          ? { mode: 'smart' }
+          : colorPreset
+            ? { mode: 'preset', preset: colorPreset }
+            : { mode: 'preset' };
+        if (sharpness > 0) colorParameters.sharpness = Number(sharpness);
+        steps.push({ type: 'color_correct', parameters: colorParameters });
       }
 
       const createdJob = await createJob(sourceVideo.id, steps);
@@ -634,6 +640,8 @@ export default function App() {
         setColorPreset={setColorPreset}
         smartColor={smartColor}
         setSmartColor={setSmartColor}
+        sharpness={sharpness}
+        setSharpness={setSharpness}
         processing={processing}
         uploading={uploading}
         hasPipelineSteps={hasPipelineSteps}

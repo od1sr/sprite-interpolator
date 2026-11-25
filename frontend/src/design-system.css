@@ -599,6 +599,11 @@ img{max-width:100%}
 }
 .smart-check input{width:16px;height:16px;accent-color:var(--accent);cursor:pointer;flex:0 0 auto}
 .smart-check.selected{color:var(--accent)}
+.sharp-control{margin-top:14px}
+.sharp-head{display:flex;align-items:center;justify-content:space-between;font-size:13px;margin-bottom:6px}
+.sharp-head span{color:var(--muted);font-variant-numeric:tabular-nums}
+.sharp-slider{width:100%;height:4px;accent-color:var(--accent);cursor:pointer}
+.sharp-slider:disabled{cursor:not-allowed;opacity:.5}
 .preview-toggle{
   position:absolute;top:8px;left:8px;z-index:2;
   display:inline-flex;border:1px solid rgba(255,255,255,.35);border-radius:8px;

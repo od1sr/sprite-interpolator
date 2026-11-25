@@ -298,7 +298,10 @@ def color_preview(
     try:
         response = httpx.post(
             f"{settings.ai_service_url}/internal/v1/color_preview",
-            json={"input_uri": str(source), "params": {"mode": mode, "preset": preset}},
+            json={
+                "input_uri": str(source),
+                "params": {"mode": mode, "preset": preset, "sharpness": payload.sharpness},
+            },
             timeout=60.0,
         )
     except httpx.HTTPError as exc:

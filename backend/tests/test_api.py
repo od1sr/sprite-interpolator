@@ -71,21 +71,32 @@ def test_color_preview_proxies_ai_frames(client, monkeypatch):
     )
     assert response.status_code == 200
     assert response.json() == {"before": "before", "after": "after"}
-    assert calls[0][1]["params"] == {"mode": "preset", "preset": "cinema"}
+    assert calls[0][1]["params"] == {"mode": "preset", "preset": "cinema", "sharpness": 0}
 
     response = test_client.post(
         f"/api/v1/videos/{video_id}/color-preview",
-        json={"mode": "preset", "preset": None},
+        json={"mode": "preset", "preset": None, "sharpness": 45},
     )
     assert response.status_code == 200
-    assert calls[1][1]["params"] == {"mode": "preset", "preset": None}
+    assert calls[1][1]["params"] == {"mode": "preset", "preset": None, "sharpness": 45}
 
     response = test_client.post(
         f"/api/v1/videos/{video_id}/color-preview",
-        json={"mode": "smart"},
+        json={"mode": "smart", "sharpness": 60},
     )
     assert response.status_code == 200
-    assert calls[2][1]["params"] == {"mode": "smart", "preset": None}
+    assert calls[2][1]["params"] == {"mode": "smart", "preset": None, "sharpness": 60}
+
+
+def test_color_preview_rejects_out_of_range_sharpness(client, monkeypatch):
+    test_client, _ = client
+    video_id = upload(test_client, monkeypatch).json()["id"]
+
+    response = test_client.post(
+        f"/api/v1/videos/{video_id}/color-preview",
+        json={"mode": "preset", "sharpness": 101},
+    )
+    assert response.status_code == 422
 
 
 def test_color_preview_rejects_unknown_preset(client, monkeypatch):
@@ -216,6 +227,24 @@ def test_create_job_accepts_color_correction_and_orders_steps(client, monkeypatc
     assert smart.json()["steps"][0]["parameters"] == {"mode": "smart"}
 
 
+def test_create_job_accepts_sharpness_only_color_step(client, monkeypatch):
+    test_client, _ = client
+    from app import api
+
+    monkeypatch.setattr(api.process_job, "apply_async", lambda args: None)
+    video_id = upload(test_client, monkeypatch).json()["id"]
+
+    response = test_client.post(
+        "/api/v1/jobs",
+        json={
+            "video_id": video_id,
+            "steps": [{"type": "color_correct", "parameters": {"mode": "preset", "sharpness": 50}}],
+        },
+    )
+    assert response.status_code == 202
+    assert response.json()["steps"][0]["parameters"] == {"mode": "preset", "sharpness": 50}
+
+
 @pytest.mark.parametrize(
     "parameters",
     [
@@ -224,6 +253,8 @@ def test_create_job_accepts_color_correction_and_orders_steps(client, monkeypatc
         {"mode": "smart", "preset": "cinema"},
         {"mode": "auto"},
         {"mode": "preset", "preset": "cinema", "brightness": 10},
+        {"mode": "preset", "preset": "cinema", "sharpness": 101},
+        {"mode": "smart", "sharpness": -1},
     ],
 )
 def test_create_job_rejects_invalid_color_parameters(client, monkeypatch, parameters):

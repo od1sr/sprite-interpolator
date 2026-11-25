@@ -179,6 +179,8 @@ export default function NewProcess({
   setColorPreset,
   smartColor,
   setSmartColor,
+  sharpness,
+  setSharpness,
   processing,
   uploading,
   hasPipelineSteps,
@@ -217,27 +219,33 @@ export default function NewProcess({
     if (!video?.id) return undefined;
 
     setPreviewLoading(true);
-    getColorPreview(video.id, smartColor ? 'smart' : 'preset', colorPreset || null)
-      .then((result) => {
-        if (token !== previewSequence.current) return;
-        setPreviewUrls({
-          before: `data:image/jpeg;base64,${result.before}`,
-          after: `data:image/jpeg;base64,${result.after}`,
+    // Debounce slider drags so the AI service is not hit on every input event.
+    const timer = window.setTimeout(() => {
+      getColorPreview(video.id, smartColor ? 'smart' : 'preset', colorPreset || null, sharpness)
+        .then((result) => {
+          if (token !== previewSequence.current) return;
+          setPreviewUrls({
+            before: `data:image/jpeg;base64,${result.before}`,
+            after: `data:image/jpeg;base64,${result.after}`,
+          });
+        })
+        .catch((previewFailure) => {
+          if (token !== previewSequence.current) return;
+          console.error('Ошибка предпросмотра коррекции цвета:', previewFailure);
+          setPreviewError(
+            `Не удалось получить кадр из видео: ${previewFailure?.message || 'неизвестная ошибка'}`,
+          );
+        })
+        .finally(() => {
+          if (token === previewSequence.current) setPreviewLoading(false);
         });
-      })
-      .catch((previewFailure) => {
-        if (token !== previewSequence.current) return;
-        console.error('Ошибка предпросмотра коррекции цвета:', previewFailure);
-        setPreviewError(
-          `Не удалось получить кадр из видео: ${previewFailure?.message || 'неизвестная ошибка'}`,
-        );
-      })
-      .finally(() => {
-        if (token === previewSequence.current) setPreviewLoading(false);
-      });
+    }, 150);
 
-    return () => { previewSequence.current += 1; };
-  }, [video?.id, colorPreset, smartColor]);
+    return () => {
+      previewSequence.current += 1;
+      window.clearTimeout(timer);
+    };
+  }, [video?.id, colorPreset, smartColor, sharpness]);
 
   const shownPreviewUrl = previewView === 'before' ? previewUrls?.before : previewUrls?.after;
 
@@ -384,6 +392,23 @@ export default function NewProcess({
               />
               <span>Умная коррекция</span>
             </label>
+            <div className="sharp-control">
+              <div className="sharp-head">
+                <label htmlFor="sharpness-range">Резкость</label>
+                <span>{sharpness}%</span>
+              </div>
+              <input
+                id="sharpness-range"
+                className="sharp-slider"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={sharpness}
+                onChange={(event) => setSharpness(Number(event.target.value))}
+                disabled={processing}
+              />
+            </div>
           </div>
         </div>
 

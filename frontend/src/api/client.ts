@@ -54,11 +54,16 @@ export async function getColorPreview(
   videoId: string,
   mode: 'preset' | 'smart',
   preset: string | null,
+  sharpness: number,
 ): Promise<{ before: string; after: string }> {
   const response = await fetch(`${BASE_URL}/videos/${videoId}/color-preview`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mode, preset: mode === 'preset' ? preset : null }),
+    body: JSON.stringify({
+      mode,
+      preset: mode === 'preset' ? preset : null,
+      sharpness,
+    }),
   });
   return handleResponse<{ before: string; after: string }>(response);
 }
