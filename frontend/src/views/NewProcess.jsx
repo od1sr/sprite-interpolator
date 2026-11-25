@@ -201,6 +201,7 @@ export default function NewProcess({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState(null);
   const previewSequence = useRef(0);
+  const previewVideoId = useRef(null);
 
   useEffect(() => {
     const sourceChanged = Boolean(sourceFps) && previousSourceFps.current !== sourceFps;
@@ -214,8 +215,13 @@ export default function NewProcess({
 
   useEffect(() => {
     const token = ++previewSequence.current;
-    setPreviewUrls(null);
     setPreviewError(null);
+    // Keep the previous frame visible while settings change; only a new file
+    // invalidates it because it belongs to a different video.
+    if (previewVideoId.current !== (video?.id ?? null)) {
+      previewVideoId.current = video?.id ?? null;
+      setPreviewUrls(null);
+    }
     if (!video?.id) return undefined;
 
     setPreviewLoading(true);
@@ -364,15 +370,19 @@ export default function NewProcess({
                   После
                 </button>
               </div>
-              {previewLoading && <div className="preview-status">Загрузка кадра…</div>}
-              {previewError && <div className="preview-status">{previewError}</div>}
-              {!previewLoading && !previewError && shownPreviewUrl && (
-                <>
-                  <img
-                    src={shownPreviewUrl}
-                    alt={previewView === 'before' ? 'Кадр до коррекции цвета' : 'Кадр после коррекции цвета'}
-                  />
-                </>
+              {shownPreviewUrl && (
+                <img
+                  src={shownPreviewUrl}
+                  alt={previewView === 'before' ? 'Кадр до коррекции цвета' : 'Кадр после коррекции цвета'}
+                />
+              )}
+              {previewLoading && !shownPreviewUrl && <div className="preview-status">Загрузка кадра…</div>}
+              {previewError && !shownPreviewUrl && <div className="preview-status">{previewError}</div>}
+              {previewLoading && shownPreviewUrl && (
+                <div className="preview-spinner" aria-label="Обновление предпросмотра" />
+              )}
+              {previewError && shownPreviewUrl && (
+                <div className="preview-error-toast">{previewError}</div>
               )}
             </div>
             <p>Готовый пресет или автоматическая коррекция</p>
@@ -405,6 +415,7 @@ export default function NewProcess({
                 max="100"
                 step="1"
                 value={sharpness}
+                style={{ '--sharp-progress': `${sharpness}%` }}
                 onChange={(event) => setSharpness(Number(event.target.value))}
                 disabled={processing}
               />
