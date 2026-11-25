@@ -1,6 +1,7 @@
 import logging
 import shutil
 import stat
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -23,6 +24,7 @@ from app.schemas import (
     ExportJobResponse,
     JobCreate,
     JobResponse,
+    ProjectPage,
     ResultResponse,
     VideoPage,
     VideoResponse,
@@ -293,6 +295,62 @@ def create_job(payload: JobCreate, session: Session = Depends(get_session)) -> J
     return job
 
 
+@router.get("/jobs", response_model=ProjectPage)
+def list_jobs(
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    session: Session = Depends(get_session),
+) -> dict:
+    total = session.scalar(select(func.count()).select_from(Job)) or 0
+    jobs = session.scalars(
+        select(Job).order_by(Job.created_at.desc(), Job.id).limit(limit).offset(offset)
+    ).all()
+    if not jobs:
+        return {"items": [], "total": total, "limit": limit, "offset": offset}
+
+    job_ids = [job.id for job in jobs]
+    video_ids = {job.video_id for job in jobs}
+    videos = {
+        video.id: video
+        for video in session.scalars(select(Video).where(Video.id.in_(video_ids))).all()
+    }
+    results = {
+        result.job_id: result
+        for result in session.scalars(select(Result).where(Result.job_id.in_(job_ids))).all()
+    }
+    exports_by_job: dict = defaultdict(list)
+    exports = session.scalars(
+        select(ExportJob)
+        .where(ExportJob.job_id.in_(job_ids))
+        .order_by(ExportJob.created_at.desc(), ExportJob.id)
+    ).all()
+    for export in exports:
+        exports_by_job[export.job_id].append(export)
+
+    items = []
+    for job in jobs:
+        video = videos.get(job.video_id)
+        result = results.get(job.id)
+        items.append({
+            "id": job.id,
+            "video_id": job.video_id,
+            "video_filename": video.filename if video else "Удалённое видео",
+            "status": job.status,
+            "steps": job.steps,
+            "progress": job.progress,
+            "current_step": job.current_step,
+            "message": job.message,
+            "result_id": job.result_id,
+            "error": job.error,
+            "created_at": job.created_at,
+            "started_at": job.started_at,
+            "finished_at": job.finished_at,
+            "exports": exports_by_job[job.id],
+            "download_url": f"/api/v1/jobs/{job.id}/result/download" if result else None,
+        })
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
 @router.get("/jobs/{job_id}", response_model=JobResponse)
 def get_job(job_id: UUID, session: Session = Depends(get_session)) -> Job:
     job = session.get(Job, job_id)
@@ -468,6 +526,11 @@ def create_export(
     if not _video_path(video).is_file():
         raise APIError(409, "INVALID_STATE", "Исходный файл больше недоступен")
 
+    if payload.job_id is not None:
+        source_job = session.get(Job, payload.job_id)
+        if source_job is None or source_job.video_id != video_id:
+            raise APIError(422, "VALIDATION_ERROR", "Задача обработки не найдена для этого видео")
+
     profile = EXPORT_PROFILES.get(payload.profile_id)
     if not profile:
         raise APIError(404, "RESOURCE_NOT_FOUND", "Профиль экспорта не найден")
@@ -481,6 +544,7 @@ def create_export(
 
     job = ExportJob(
         video_id=video_id,
+        job_id=payload.job_id,
         profile_id=payload.profile_id,
         config_snapshot=profile,
         adaptation_mode=payload.adaptation_mode,

@@ -82,6 +82,7 @@ export type AdaptationMode = 'crop' | 'pad' | 'blur';
 export interface ExportJob {
   id: string;
   video_id: string;
+  job_id: string | null;
   profile_id: string;
   adaptation_mode: AdaptationMode;
   status: string;
@@ -90,4 +91,30 @@ export interface ExportJob {
   error_code: string | null;
   user_message: string | null;
   created_at: string;
+}
+
+
+export interface Project {
+  id: string;
+  video_id: string;
+  video_filename: string;
+  status: JobStatus;
+  steps: PipelineStep[];
+  progress: number;
+  current_step: number | null;
+  message: string | null;
+  result_id: string | null;
+  error: JobError | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  exports: ExportJob[];
+  download_url: string | null;
+}
+
+export interface ProjectPage {
+  items: Project[];
+  total: number;
+  limit: number;
+  offset: number;
 }

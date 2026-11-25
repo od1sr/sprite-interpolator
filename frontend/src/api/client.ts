@@ -1,4 +1,11 @@
-import type { AdaptationMode, ExportJob, Job, Result, Video } from '../types/api';
+import type {
+  AdaptationMode,
+  ExportJob,
+  Job,
+  ProjectPage,
+  Result,
+  Video,
+} from '../types/api';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
@@ -47,6 +54,11 @@ export async function getJobStatus(jobId: string): Promise<Job> {
   return handleResponse<Job>(response);
 }
 
+export async function listProjects(): Promise<ProjectPage> {
+  const response = await fetch(`${BASE_URL}/jobs?limit=100`);
+  return handleResponse<ProjectPage>(response);
+}
+
 export async function getJobResult(jobId: string): Promise<Result> {
   const response = await fetch(`${BASE_URL}/jobs/${jobId}/result`);
   return handleResponse<Result>(response);
@@ -56,6 +68,7 @@ export async function createVideoExport(
   videoId: string,
   profileId: string,
   adaptationMode: AdaptationMode,
+  jobId?: string,
 ): Promise<ExportJob> {
   const response = await fetch(`${BASE_URL}/videos/${videoId}/exports`, {
     method: 'POST',
@@ -63,6 +76,7 @@ export async function createVideoExport(
     body: JSON.stringify({
       profile_id: profileId,
       adaptation_mode: adaptationMode,
+      job_id: jobId ?? null,
     }),
   });
   return handleResponse<ExportJob>(response);

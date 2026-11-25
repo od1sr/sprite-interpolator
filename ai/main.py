@@ -7,6 +7,8 @@ from contextlib import asynccontextmanager
 
 from pathlib import Path
 
+from cancellation import ProcessingCancelled
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ai")
 
@@ -107,6 +109,7 @@ def upscale(request_data: dict):
     input_uri = request_data.get("input_uri")
     output_uri = request_data.get("output_uri")
     params = request_data.get("params", {})
+    cancel_uri = request_data.get("cancel_uri")
 
     if not input_uri or not output_uri:
         return _error(400, "bad_request", "input_uri and output_uri are required")
@@ -123,7 +126,9 @@ def upscale(request_data: dict):
         return _error(400, "bad_params", "tile_size must be positive")
 
     try:
-        return upscaler_model.process(input_uri, output_uri)
+        return upscaler_model.process(input_uri, output_uri, cancel_uri)
+    except ProcessingCancelled:
+        return _error(409, "cancelled", "Обработка отменена")
     except RuntimeError as e:
         if "out of memory" in str(e).lower():
             return _error(507, "cuda_oom", f"CUDA OOM: {e}. Уменьшите tile_size.")
@@ -137,6 +142,7 @@ def interpolate(request_data: dict):
     input_uri = request_data.get("input_uri")
     output_uri = request_data.get("output_uri")
     params = request_data.get("params", {})
+    cancel_uri = request_data.get("cancel_uri")
 
     if not input_uri or not output_uri:
         return _error(400, "bad_request", "input_uri and output_uri are required")
@@ -150,7 +156,9 @@ def interpolate(request_data: dict):
         return _error(400, "bad_params", "target_fps must be positive")
 
     try:
-        return interpolator_model.process(input_uri, output_uri, target_fps)
+        return interpolator_model.process(input_uri, output_uri, target_fps, cancel_uri)
+    except ProcessingCancelled:
+        return _error(409, "cancelled", "Обработка отменена")
     except ValueError as e:
         return _error(400, "bad_params", str(e))
     except RuntimeError as e:

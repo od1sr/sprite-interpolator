@@ -9,6 +9,7 @@ from realesrgan import RealESRGANer
 from typing import Optional
 
 from audio import finalize_video
+from cancellation import ProcessingCancelled, is_cancelled
 from progress import clear_progress, write_progress
 
 logger = logging.getLogger("ai.upscaler")
@@ -56,12 +57,14 @@ class VideoUpscaler:
             self.half,
         )
 
-    def process(self, input_path: str, output_path: str) -> dict:
+    def process(self, input_path: str, output_path: str, cancel_uri: str | None = None) -> dict:
         """
         Обрабатывает видео: читает, апскейлит каждый кадр, записывает результат.
         Возвращает метаданные выходного файла.
         """
         logger.info("Upscale.start: device=%s, dtype=%s", self.device, "fp16" if self.half else "fp32")
+        if is_cancelled(cancel_uri):
+            raise ProcessingCancelled("Обработка отменена")
         cap = cv2.VideoCapture(input_path)
         if not cap.isOpened():
             raise IOError(f"Не удалось открыть входное видео: {input_path}")
@@ -89,6 +92,8 @@ class VideoUpscaler:
         report_every = max(1, total_frames // 100)
         try:
             while True:
+                if is_cancelled(cancel_uri):
+                    raise ProcessingCancelled("Обработка отменена")
                 ret, frame = cap.read()
                 if not ret:
                     break
@@ -109,6 +114,10 @@ class VideoUpscaler:
                     print(f"Обработано кадров: {processed_frames}/{total_frames}")
 
             write_progress(output_path, processed_frames, total_frames)
+        except ProcessingCancelled:
+            clear_progress(output_path)
+            silent_path.unlink(missing_ok=True)
+            raise
         finally:
             cap.release()
             out.release()

@@ -395,3 +395,38 @@ def test_export_download_requires_ready_job_and_serves_output(client):
     downloaded = test_client.get(f"/api/v1/exports/{export_id}/download")
     assert downloaded.status_code == 200
     assert downloaded.content == b"rendered"
+
+
+def test_list_jobs_returns_projects_with_nested_exports(client, monkeypatch):
+    test_client, _ = client
+    video_id = upload(test_client, monkeypatch).json()["id"]
+    from app import api
+
+    monkeypatch.setattr(api.process_job, "apply_async", lambda args: None)
+    monkeypatch.setattr(api.process_export_job, "apply_async", lambda args: None)
+    steps = [{"type": "interpolate", "parameters": {"target_fps": 60}}]
+    first = test_client.post(
+        "/api/v1/jobs",
+        json={"video_id": video_id, "steps": steps},
+    ).json()
+    second = test_client.post(
+        "/api/v1/jobs",
+        json={"video_id": video_id, "steps": steps},
+    ).json()
+    export = test_client.post(
+        f"/api/v1/videos/{video_id}/exports",
+        json={
+            "profile_id": "youtube_standard_v1",
+            "adaptation_mode": "crop",
+            "job_id": second["id"],
+        },
+    ).json()
+
+    projects = test_client.get("/api/v1/jobs").json()
+    assert projects["total"] == 2
+    assert {item["id"] for item in projects["items"]} == {first["id"], second["id"]}
+    assert all(item["video_filename"] == "source.mp4" for item in projects["items"])
+    second_project = next(item for item in projects["items"] if item["id"] == second["id"])
+    assert [item["id"] for item in second_project["exports"]] == [export["id"]]
+    first_project = next(item for item in projects["items"] if item["id"] == first["id"])
+    assert first_project["exports"] == []

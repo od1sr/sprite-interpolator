@@ -456,6 +456,7 @@ img{max-width:100%}
   padding:14px 4px;border-top:1px solid var(--line);
 }
 .proj:first-child{border-top:none}
+.task-cancel{flex:0 0 auto}
 .thumb{
   width:52px;height:52px;border-radius:10px;flex:0 0 auto;
   background:linear-gradient(135deg,hsl(var(--h,215) 30% 93%),hsl(var(--h,215) 38% 84%));

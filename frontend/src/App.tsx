@@ -5,10 +5,17 @@ import {
   getJobResult,
   getJobStatus,
   getVideoExport,
+  listProjects,
   resolveApiUrl,
   uploadVideo,
 } from './api/client';
-import type { AdaptationMode, ExportJob, Job, Result, Video } from './types/api';
+import type {
+  AdaptationMode,
+  ExportJob,
+  Job,
+  Project,
+  Video,
+} from './types/api';
 import { useAuth } from './hooks/useAuth';
 import { formatDuration, getStepTiming } from './utils/processingTime';
 import Sidebar from './components/Sidebar';
@@ -54,6 +61,20 @@ interface TaskView {
   message?: string;
   downloadUrl?: string;
   createdAt: string;
+}
+
+function mergeProjects(current: Project[], incoming: Project[]): Project[] {
+  const byId = new Map(current.map((project) => [project.id, project]));
+  const merged = incoming.map((project) => {
+    const existing = byId.get(project.id);
+    return {
+      ...existing,
+      ...project,
+      download_url: project.download_url || existing?.download_url || null,
+    };
+  });
+  const missing = current.filter((project) => !incoming.some((item) => item.id === project.id));
+  return [...merged, ...missing];
 }
 
 const EXPORT_PROFILES: ExportProfile[] = [
@@ -248,7 +269,8 @@ export default function App() {
   const [video, setVideo] = useState<Video | null>(null);
   const [job, setJob] = useState<Job | null>(null);
   const [exportJobs, setExportJobs] = useState<ExportTask[]>([]);
-  const [result, setResult] = useState<Result | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsRequested, setProjectsRequested] = useState(false);
   const [scale, setScale] = useState<number>(2);
   const [fps, setFps] = useState<number>(60);
   const [profileIds, setProfileIds] = useState<string[]>([EXPORT_PROFILES[0].id]);
@@ -268,7 +290,6 @@ export default function App() {
     setVideo(null);
     setJob(null);
     setExportJobs([]);
-    setResult(null);
     setProcessing(false);
     setUploading(true);
     setError(null);
@@ -303,16 +324,42 @@ export default function App() {
       if (fps > 0) steps.push({ type: 'interpolate', parameters: { target_fps: Number(fps) } });
       if (scale > 1) steps.push({ type: 'upscale', parameters: { scale: Number(scale) } });
 
-      setJob(await createJob(sourceVideo.id, steps));
+      const createdJob = await createJob(sourceVideo.id, steps);
+      setJob(createdJob);
+      setProjects((current) => [
+        {
+          id: createdJob.id,
+          video_id: createdJob.video_id,
+          video_filename: sourceVideo.filename,
+          status: createdJob.status,
+          steps: createdJob.steps,
+          progress: createdJob.progress ?? 0,
+          current_step: createdJob.current_step,
+          message: createdJob.message ?? null,
+          result_id: createdJob.result_id,
+          error: createdJob.error,
+          created_at: createdJob.created_at,
+          started_at: createdJob.started_at,
+          finished_at: createdJob.finished_at,
+          exports: [],
+          download_url: null,
+        },
+        ...current,
+      ]);
       setView('projects');
 
       if (selectedProfiles.length) {
         const outcomes = await Promise.allSettled(selectedProfiles.map(async (profile): Promise<ExportTask> => {
-          return createVideoExport(sourceVideo.id, profile.id, adaptationMode);
+          return createVideoExport(sourceVideo.id, profile.id, adaptationMode, createdJob.id);
         }));
         const created = outcomes.flatMap((outcome) => outcome.status === 'fulfilled' ? [outcome.value] : []);
         const failures = outcomes.filter((outcome) => outcome.status === 'rejected');
-        setExportJobs((current) => [...current, ...created]);
+        setExportJobs((current) => [...created, ...current]);
+        setProjects((current) => current.map((project) => (
+          project.id === createdJob.id
+            ? { ...project, exports: [...created, ...project.exports] }
+            : project
+        )));
         if (failures.length) {
           const firstFailure = failures[0];
           setError(
@@ -329,7 +376,8 @@ export default function App() {
     }
   };
 
-  const pendingExportIds = exportJobs
+  const pendingExportIds = projects
+    .flatMap((project) => project.exports)
     .filter((task) => !['ready', 'failed', 'cancelled'].includes(task.status))
     .map((task) => task.id)
     .join('|');
@@ -342,7 +390,13 @@ export default function App() {
 
     const interval = window.setInterval(async () => {
       try {
-        setJob(await getJobStatus(jobId));
+        const updated = await getJobStatus(jobId);
+        setJob(updated);
+        setProjects((current) => current.map((project) => (
+          project.id === updated.id
+            ? { ...project, ...updated }
+            : project
+        )));
       } catch (pollError) {
         setError(getErrorMessage(pollError, 'Не удалось обновить состояние обработки'));
       }
@@ -374,6 +428,10 @@ export default function App() {
         const updated = updates.get(task.id);
         return updated || task;
       }));
+      setProjects((current) => current.map((project) => ({
+        ...project,
+        exports: project.exports.map((task) => updates.get(task.id) || task),
+      })));
     }, 2000);
     return () => window.clearInterval(interval);
   }, [pendingExportIds]);
@@ -386,63 +444,102 @@ export default function App() {
   }, [exportJobs, job]);
 
   useEffect(() => {
-    if (job?.status !== 'completed' || result) return;
+    if (job?.status !== 'completed') return;
     getJobResult(job.id)
-      .then(setResult)
+      .then((download) => {
+        setProjects((current) => current.map((project) => (
+          project.id === job.id
+            ? { ...project, download_url: download.download_url }
+            : project
+        )));
+      })
       .catch((requestError: unknown) => {
         setError(getErrorMessage(requestError, 'Не удалось получить результат обработки'));
       });
-  }, [job?.id, job?.status, result]);
+  }, [job?.id, job?.status]);
 
-  const jobStepTimings = useMemo(
-    () => (job?.steps ?? []).map((step) => getStepTiming(step, clock)),
-    [job?.steps, clock],
-  );
-
-  const tasks = useMemo<TaskView[]>(() => {
-    const items: TaskView[] = [];
-    const exportTaskViews: TaskView[] = exportJobs.map((exportJob) => {
-      const exportProfile = EXPORT_PROFILES.find((profile) => profile.id === exportJob.profile_id);
-      return {
-        id: exportJob.id,
-        name: file?.name || `Экспорт ${exportJob.id.slice(0, 8)}`,
-        kind: exportProfile?.title || exportJob.profile_id,
-        status: exportJob.status,
-        progress: exportJob.progress,
-        message: exportJob.user_message || exportJob.error_code || undefined,
-        downloadUrl: exportJob.status === 'ready'
-          ? resolveApiUrl(`exports/${exportJob.id}/download`)
-          : undefined,
-        createdAt: exportJob.created_at,
-      };
-    });
-    if (job) {
-      const stepViews: StepProgressView[] = (job.steps ?? []).map((step, index) => ({
-        type: step.type,
-        status: step.status,
-        progress: step.status === 'completed' ? 100 : step.progress ?? 0,
-        elapsedSeconds: jobStepTimings[index]?.elapsedSeconds ?? null,
-        remainingSeconds: jobStepTimings[index]?.remainingSeconds ?? null,
-      }));
-      items.push({
-        id: job.id,
-        name: file?.name || `Обработка ${job.id.slice(0, 8)}`,
-        kind: stepViews.length
-          ? stepViews.map((step) => STEP_LABELS[step.type] || step.type).join(' + ')
-          : 'Апскейл и интерполяция',
-        status: job.status,
-        progress: job.progress ?? 0,
-        steps: stepViews,
-        subtasks: exportTaskViews,
-        message: job.error?.message || job.message,
-        downloadUrl: result ? resolveApiUrl(result.download_url) : undefined,
-        createdAt: job.created_at,
+  useEffect(() => {
+    if (view !== 'projects' || projectsRequested) return;
+    setProjectsRequested(true);
+    listProjects()
+      .then((page) => {
+        setProjects((current) => mergeProjects(current, page.items));
+      })
+      .catch((requestError: unknown) => {
+        setError(getErrorMessage(requestError, 'Не удалось загрузить проекты'));
       });
-    } else {
-      items.push(...exportTaskViews);
-    }
-    return items.sort((first, second) => second.createdAt.localeCompare(first.createdAt));
-  }, [exportJobs, file?.name, job, jobStepTimings, result]);
+  }, [view, projectsRequested]);
+
+  const activeProjectsKey = projects
+    .filter((project) => (
+      ['queued', 'processing', 'cancelling'].includes(project.status)
+      || project.exports.some((task) => ['queued', 'processing'].includes(task.status))
+    ))
+    .map((project) => project.id)
+    .join('|');
+
+  useEffect(() => {
+    if (!activeProjectsKey) return;
+
+    const interval = window.setInterval(async () => {
+      try {
+        const page = await listProjects();
+        setProjects((current) => mergeProjects(current, page.items));
+      } catch (pollError) {
+        setError(getErrorMessage(pollError, 'Не удалось обновить проекты'));
+      }
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [activeProjectsKey]);
+
+  const resolveExportView = (exportJob: ExportJob, projectName: string): TaskView => {
+    const exportProfile = EXPORT_PROFILES.find((profile) => profile.id === exportJob.profile_id);
+    return {
+      id: exportJob.id,
+      name: projectName,
+      kind: exportProfile?.title || exportJob.profile_id,
+      status: exportJob.status,
+      progress: exportJob.progress,
+      message: exportJob.user_message || exportJob.error_code || undefined,
+      downloadUrl: exportJob.status === 'ready'
+        ? resolveApiUrl(`exports/${exportJob.id}/download`)
+        : undefined,
+      createdAt: exportJob.created_at,
+    };
+  };
+
+  const tasks = useMemo<TaskView[]>(() => projects.map((project) => {
+    const timings = project.id === job?.id
+      ? (project.steps ?? []).map((step) => getStepTiming(step, clock))
+      : [];
+    const stepViews: StepProgressView[] = (project.steps ?? []).map((step, stepIndex) => ({
+      type: step.type,
+      status: step.status,
+      progress: step.status === 'completed' ? 100 : step.progress ?? 0,
+      elapsedSeconds: timings[stepIndex]?.elapsedSeconds ?? null,
+      remainingSeconds: timings[stepIndex]?.remainingSeconds ?? null,
+    }));
+    return {
+      id: project.id,
+      name: project.video_filename,
+      kind: stepViews.length
+        ? stepViews.map((step) => STEP_LABELS[step.type] || step.type).join(' + ')
+        : 'Апскейл и интерполяция',
+      status: project.status,
+      progress: project.progress ?? 0,
+      steps: stepViews,
+      subtasks: project.exports.map((exportJob) => resolveExportView(exportJob, project.video_filename)),
+      message: project.error?.message || project.message || undefined,
+      downloadUrl: project.download_url
+        ? resolveApiUrl(project.download_url)
+        : undefined,
+      createdAt: project.created_at,
+    };
+  }).sort((first, second) => second.createdAt.localeCompare(first.createdAt)), [
+    clock,
+    job?.id,
+    projects,
+  ]);
 
   const projectsForUi = useMemo(() => {
     return tasks.map((task, index) => ({
@@ -494,7 +591,7 @@ export default function App() {
         adaptationMode={adaptationMode}
         setAdaptationMode={setAdaptationMode}
         adaptationModes={ADAPTATION_MODES}
-        exportJobsCount={exportJobs.length}
+        exportJobsCount={selectedProfiles.length}
         onStart={handleSubmit}
       />
     </>

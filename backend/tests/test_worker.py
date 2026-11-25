@@ -70,7 +70,7 @@ def worker_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 def test_worker_processes_pipeline_and_persists_result(worker_context, monkeypatch):
     worker, sessions, root, job_id = worker_context
 
-    def fake_ai_call(step_type, input_path, output_path, parameters):
+    def fake_ai_call(step_type, input_path, output_path, parameters, cancel_path=None):
         assert step_type == "upscale"
         assert input_path.name.endswith(".mp4")
         assert parameters == {"scale": 2}
@@ -177,20 +177,12 @@ def test_worker_records_retryable_ai_failure(worker_context, monkeypatch):
 def test_worker_stops_after_a_cancellation_during_ai_processing(worker_context, monkeypatch):
     worker, sessions, root, job_id = worker_context
 
-    def cancel_during_ai(_step_type, _input_path, output_path, _parameters):
+    def cancel_during_ai(_step_type, _input_path, output_path, _parameters, cancel_path=None):
         with sessions.begin() as session:
             job = session.scalar(select(Job).where(Job.id == job_id))
             job.status = "cancelling"
         output_path.write_bytes(b"partial result")
-        return {
-            "status": "completed",
-            "output_uri": str(output_path),
-            "size_bytes": len(b"partial result"),
-            "duration_seconds": 2.5,
-            "width": 2560,
-            "height": 1440,
-            "fps": 30,
-        }
+        raise worker.JobCancelled
 
     monkeypatch.setattr(worker, "_call_ai", cancel_during_ai)
     worker.process_job.run(str(job_id))
@@ -202,6 +194,7 @@ def test_worker_stops_after_a_cancellation_during_ai_processing(worker_context, 
         assert job.steps[0]["status"] == "cancelled"
         assert job.result is None
     assert not (root / "jobs" / str(job_id)).exists()
+    assert list((root / "cancel").glob(f"{job_id}-*.cancel"))
 
 
 def test_cancellation_wins_if_ai_fails_after_cancellation_was_requested(worker_context, monkeypatch):

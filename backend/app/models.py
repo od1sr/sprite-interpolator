@@ -75,9 +75,13 @@ class Result(Base):
 
 class ExportJob(Base):
     __tablename__ = "export_jobs"
+    __table_args__ = (Index("ix_export_jobs_job_id", "job_id"),)
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     video_id: Mapped[UUID] = mapped_column(ForeignKey("videos.id", ondelete="CASCADE"))
+    job_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("jobs.id", ondelete="CASCADE"), nullable=True
+    )
     profile_id: Mapped[str] = mapped_column(String(64))
     config_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
     adaptation_mode: Mapped[str] = mapped_column(String(16))

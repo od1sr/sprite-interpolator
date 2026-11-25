@@ -125,10 +125,12 @@ class ExportJobCreate(BaseModel):
     profile_id: str
     adaptation_mode: Literal["crop", "pad", "blur"]
     fps_override: Literal["source"] | int | None = "source"
+    job_id: UUID | None = None
 
 class ExportJobResponse(APIModel):
     id: UUID
     video_id: UUID
+    job_id: UUID | None
     profile_id: str
     adaptation_mode: str
     status: str
@@ -137,3 +139,26 @@ class ExportJobResponse(APIModel):
     error_code: str | None
     user_message: str | None
     created_at: datetime
+
+class ProjectResponse(APIModel):
+    id: UUID
+    video_id: UUID
+    video_filename: str
+    status: str
+    steps: list[StepResponse]
+    progress: float
+    current_step: int | None
+    message: str | None
+    result_id: UUID | None
+    error: dict[str, Any] | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    exports: list[ExportJobResponse]
+    download_url: str | None
+
+class ProjectPage(APIModel):
+    items: list[ProjectResponse]
+    total: int
+    limit: int
+    offset: int

@@ -16,6 +16,7 @@ sys.path.insert(0, str(RIFE_DIR))
 
 import interpolation_model as rife_model
 from audio import finalize_video
+from cancellation import ProcessingCancelled, is_cancelled
 from progress import clear_progress, write_progress
 
 logger = logging.getLogger("ai.interpolator")
@@ -87,8 +88,16 @@ class VideoInterpolator:
         right = self._generate_between(mid, b, level - 1)
         return left + [mid] + right
 
-    def process(self, input_path: str, output_path: str, target_fps: float) -> dict:
+    def process(
+        self,
+        input_path: str,
+        output_path: str,
+        target_fps: float,
+        cancel_uri: str | None = None,
+    ) -> dict:
         logger.info("Interpolate.start: device=%s, dtype=%s", self.device, self.dtype)
+        if is_cancelled(cancel_uri):
+            raise ProcessingCancelled("Обработка отменена")
         cap = cv2.VideoCapture(input_path)
         if not cap.isOpened():
             raise IOError(f"Cannot open input video: {input_path}")
@@ -164,6 +173,8 @@ class VideoInterpolator:
 
         try:
             while True:
+                if is_cancelled(cancel_uri):
+                    raise ProcessingCancelled("Обработка отменена")
                 ret, curr = cap.read()
                 if not ret:
                     break
@@ -178,6 +189,10 @@ class VideoInterpolator:
                     pct = 100 * processed // (total_frames - 1)
                     print(f"[interpolate] {processed}/{total_frames-1} pairs ({pct}%), factor={factor}x")
             write_progress(output_path, processed, total_frames - 1)
+        except ProcessingCancelled:
+            clear_progress(output_path)
+            silent_path.unlink(missing_ok=True)
+            raise
         finally:
             cap.release()
             out.release()

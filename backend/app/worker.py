@@ -124,11 +124,24 @@ def _read_step_progress(output_path: Path) -> float | None:
     return min(99.0, max(0.0, value))
 
 
-def _call_ai(step_type: str, input_path: Path, output_path: Path, parameters: dict[str, Any]) -> dict[str, Any]:
+def _call_ai(
+    step_type: str,
+    input_path: Path,
+    output_path: Path,
+    parameters: dict[str, Any],
+    cancel_path: Path | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "input_uri": str(input_path),
+        "output_uri": str(output_path),
+        "params": parameters,
+    }
+    if cancel_path is not None:
+        payload["cancel_uri"] = str(cancel_path)
     try:
         response = httpx.post(
             f"{settings.ai_service_url}/internal/v1/{step_type}",
-            json={"input_uri": str(input_path), "output_uri": str(output_path), "params": parameters},
+            json=payload,
             timeout=settings.ai_timeout_seconds,
         )
     except httpx.HTTPError as exc:
@@ -209,30 +222,38 @@ def process_job(_: Any, job_id: str) -> None:
             current.started_at = _now()
             current.message = "Обработка видео"
 
+        cancel_dir = settings.storage_root / "cancel"
+        cancel_dir.mkdir(parents=True, exist_ok=True)
         current_input = source
         final_metadata: dict[str, Any] | None = None
         for index, step in enumerate(job.steps):
             _raise_if_cancelled(parsed_id)
             _update_step(parsed_id, index, status="processing", progress=0)
             output_path = work_dir / f"step-{index:02d}-{step['type']}.mp4"
+            cancel_path = cancel_dir / f"{parsed_id}-{index}.cancel"
+            cancel_path.unlink(missing_ok=True)
+            # The AI call is synchronous; run it in a thread so we can keep
+            # publishing its frame-level progress to the database while it works.
+            executor = ThreadPoolExecutor(max_workers=1)
             try:
-                # The AI call is synchronous; run it in a thread so we can keep
-                # publishing its frame-level progress to the database while it works.
-                with ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(
-                        _call_ai, step["type"], current_input, output_path, step["parameters"]
-                    )
-                    while True:
-                        percent = _read_step_progress(output_path)
-                        if percent is not None:
-                            _raise_if_cancelled(parsed_id)
-                            _update_step(parsed_id, index, status="processing", progress=percent)
-                        try:
-                            future.result(timeout=1.0)
-                            break
-                        except FutureTimeout:
-                            continue
-                    final_metadata = future.result()
+                future = executor.submit(
+                    _call_ai, step["type"], current_input, output_path, step["parameters"], cancel_path
+                )
+                while True:
+                    percent = _read_step_progress(output_path)
+                    if percent is not None:
+                        _raise_if_cancelled(parsed_id)
+                        _update_step(parsed_id, index, status="processing", progress=percent)
+                    try:
+                        future.result(timeout=1.0)
+                        break
+                    except FutureTimeout:
+                        continue
+                final_metadata = future.result()
+            except JobCancelled:
+                # The AI service polls this file between frames and stops the GPU work.
+                cancel_path.write_text("cancelled", encoding="utf-8")
+                raise
             except PipelineFailure as exc:
                 error = {
                     "code": exc.code,
@@ -243,6 +264,9 @@ def process_job(_: Any, job_id: str) -> None:
                 }
                 _update_step(parsed_id, index, status="failed", progress=0, error=error)
                 raise
+            finally:
+                executor.shutdown(wait=False, cancel_futures=True)
+            cancel_path.unlink(missing_ok=True)
             _raise_if_cancelled(parsed_id)
             _update_step(parsed_id, index, status="completed", progress=100)
             current_input = output_path
@@ -363,6 +387,10 @@ def process_export_job(_: Any, export_job_id: str) -> None:
             if not output_path.is_file() or output_path.stat().st_size == 0:
                 raise RuntimeError("FFmpeg не создал файл результата")
 
+            session.refresh(job)
+            if job.status == "cancelled":
+                shutil.rmtree(output_dir, ignore_errors=True)
+                return
             job.status = "ready"
             job.progress = 100
             job.output_path = f"exports/{job.id}/result.mp4"
