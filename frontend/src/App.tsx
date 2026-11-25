@@ -601,11 +601,6 @@ export default function App() {
     }
   };
 
-  const handleQuickFile = (selectedFile: File) => {
-    handleFile(selectedFile);
-    setView('new');
-  };
-
   const renderTaskList = (items: TaskView[]) => (
     items.length ? (
       <div className="proj-list">
@@ -642,20 +637,11 @@ export default function App() {
   );
 
   const renderDashboard = () => (
-    <>
-      <Dashboard
-        user={user}
-        projects={projectsForUi}
-        onAddProject={handleQuickFile}
-        onNewProcess={() => setView('new')}
-      />
-      {tasks.length > 0 && (
-        <section className="panel">
-          <div className="panel-head"><h3>Текущие задачи</h3></div>
-          {renderTaskList(tasks.slice(0, 4))}
-        </section>
-      )}
-    </>
+    <Dashboard
+      user={user}
+      projects={projectsForUi}
+      onNewProcess={() => setView('new')}
+    />
   );
 
   const renderProjects = () => (

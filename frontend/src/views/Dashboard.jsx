@@ -1,8 +1,6 @@
 import React from 'react';
-import Dropzone from '../components/Dropzone';
-import ProjectRow from '../components/ProjectRow';
 
-export default function Dashboard({ user, projects, onAddProject, onNewProcess }) {
+export default function Dashboard({ user, projects, onNewProcess }) {
   const firstName = user?.name?.split(' ')[0] || 'Пользователь';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Доброе утро' : hour < 18 ? 'Добрый день' : 'Добрый вечер';
@@ -26,22 +24,6 @@ export default function Dashboard({ user, projects, onAddProject, onNewProcess }
         <div className="stat"><div className="stat-label">В обработке</div><div className="stat-val">{activeCount}</div></div>
         <div className="stat"><div className="stat-label">Завершено</div><div className="stat-val">{completedCount}</div></div>
         <div className="stat"><div className="stat-label">С ошибкой</div><div className="stat-val">{failedCount}</div></div>
-      </div>
-
-      <div className="panel">
-        <div className="panel-head"><h3>Быстрая обработка</h3><span className="muted-sm">MP4, MOV, WebM, до 2 ГБ</span></div>
-        <Dropzone
-          title="Перетащите видео сюда"
-          sub="Выбор файла откроет форму обработки"
-          onFile={onAddProject}
-        />
-      </div>
-
-      <div className="panel">
-        <div className="panel-head"><h3>Последние проекты</h3></div>
-        <div className="proj-list">
-          {projects.slice(0, 4).map(p => <ProjectRow key={p.id} project={p} />)}
-        </div>
       </div>
     </div>
   );
