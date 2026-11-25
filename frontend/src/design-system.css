@@ -316,12 +316,14 @@ img{max-width:100%}
 #appShell{display:flex;min-height:100vh}
 
 .sidebar{
+  --side-pad:16px;
   width:250px;flex:0 0 250px;
   border-right:1px solid var(--line);
-  padding:22px 14px 18px;
+  padding:var(--side-pad);
   display:flex;flex-direction:column;gap:5px;
   position:sticky;top:0;height:100vh;
   background:var(--bg);
+  overflow:hidden;
   transition:width .18s ease,flex-basis .18s ease;
 }
 .side-top{display:flex;align-items:center;gap:8px;margin-bottom:26px;padding:0 2px}
@@ -335,17 +337,15 @@ img{max-width:100%}
 }
 .side-toggle svg{width:16px;height:16px}
 .side-toggle:hover{background:rgba(15,23,42,.055);color:var(--text)}
-.side-label{
-  font-size:11px;letter-spacing:.13em;text-transform:uppercase;
-  color:#98A2B3;padding:0 12px;margin-bottom:8px;
-}
 .side-item{
   display:flex;align-items:center;gap:11px;width:100%;
   padding:9px 12px;border-radius:9px;border:none;background:transparent;
   color:var(--muted);font-size:14px;font-weight:450;text-align:left;
+  white-space:nowrap;
   transition:background .15s,color .15s;
 }
 .side-item svg{width:17px;height:17px;flex:0 0 auto;opacity:.85}
+.side-item-label{white-space:nowrap}
 .side-item:hover{background:rgba(15,23,42,.045);color:var(--text)}
 .side-item.active{background:var(--accent-dim);color:var(--accent)}
 .side-item.active svg{opacity:1}
@@ -375,9 +375,8 @@ img{max-width:100%}
 .avatar.sm{width:28px;height:28px;font-size:11px}
 
 @media (min-width:881px){
-  .sidebar.collapsed{width:72px;flex-basis:72px;padding:18px 10px}
+  .sidebar.collapsed{width:72px;flex-basis:72px}
   .sidebar.collapsed .side-brand,
-  .sidebar.collapsed .side-label,
   .sidebar.collapsed .side-item-label,
   .sidebar.collapsed .uc-info{display:none}
   .sidebar.collapsed .side-top{justify-content:center;margin-bottom:18px;padding:0}
@@ -713,12 +712,11 @@ tbody tr:hover{background:rgba(15,23,42,.025)}
   .sidebar{
     width:100%;flex:0 0 auto;height:auto;position:relative;
     flex-direction:row;align-items:center;gap:4px;
-    padding:10px 14px;overflow-x:auto;
+    padding:var(--side-pad);overflow-x:auto;
     border-right:none;border-bottom:1px solid var(--line);
   }
   .side-top{display:none}
   .side-brand{display:none}
-  .side-label{display:none}
   .side-item{width:auto;white-space:nowrap;padding:8px 12px}
   .side-item.mobile-only{display:flex}
   .side-foot{display:none}

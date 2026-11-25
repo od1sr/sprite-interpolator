@@ -53,7 +53,6 @@ export default function Sidebar({ currentView, setView, user, getPlan }) {
           </svg>
         </button>
       </div>
-      <div className="side-label">Рабочее пространство</div>
       {menuItems.map(item => (
         <button
           key={item.id}
