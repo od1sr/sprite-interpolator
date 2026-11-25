@@ -210,7 +210,7 @@ function TaskRow({
   const isFailed = task.status === 'failed';
   const tone = isReady ? 'pill-ok' : isFailed ? 'pill-err' : task.status === 'queued' ? '' : 'pill-run';
   const progress = Math.max(0, Math.min(100, task.progress));
-  const showSteps = Boolean(task.steps && task.steps.length > 1);
+  const showSteps = Boolean(task.steps && task.steps.length > 0);
 
   return (
     <>
