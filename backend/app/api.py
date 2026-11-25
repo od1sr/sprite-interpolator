@@ -7,8 +7,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from app.config import EXPORT_PROFILES, settings
+from app.config import COLOR_PRESETS, EXPORT_PROFILES, STEP_ORDER, settings
 
+import httpx
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from fastapi.responses import FileResponse, Response
 from sqlalchemy import func, select
@@ -22,6 +23,7 @@ from app.models import ExportJob, Job, Result, Video
 from app.queue import celery_app
 from app.schemas import (
     ExportJobCreate,
+    ColorPreviewRequest,
     ExportJobResponse,
     JobCreate,
     JobResponse,
@@ -153,7 +155,7 @@ def _new_job(video_id: UUID, steps: list[dict], message: str) -> Job:
                 "finished_at": None,
                 "error": None,
             }
-            for step in steps
+            for step in sorted(steps, key=lambda item: STEP_ORDER.get(item["type"], len(STEP_ORDER)))
         ],
         progress=0,
         current_step=None,
@@ -269,6 +271,53 @@ def get_video(video_id: UUID, session: Session = Depends(get_session)) -> Video:
     if video is None:
         _raise_not_found("video")
     return video
+
+
+@router.post("/videos/{video_id}/color-preview")
+def color_preview(
+    video_id: UUID,
+    payload: ColorPreviewRequest,
+    session: Session = Depends(get_session),
+) -> dict:
+    """Proxy a single-frame before/after preview to the AI service."""
+    video = session.get(Video, video_id)
+    if video is None:
+        _raise_not_found("video")
+    source = _video_path(video)
+    if not source.is_file():
+        raise APIError(409, "INVALID_STATE", "Исходный файл больше недоступен")
+
+    mode = payload.mode
+    preset = payload.preset if mode == "preset" else None
+    if mode == "preset" and preset not in (None, "") and preset not in COLOR_PRESETS:
+        raise APIError(
+            422, "VALIDATION_ERROR", "Недопустимый пресет коррекции цвета",
+            {"preset": preset, "allowed_presets": list(COLOR_PRESETS)},
+        )
+
+    try:
+        response = httpx.post(
+            f"{settings.ai_service_url}/internal/v1/color_preview",
+            json={"input_uri": str(source), "params": {"mode": mode, "preset": preset}},
+            timeout=60.0,
+        )
+    except httpx.HTTPError as exc:
+        raise APIError(503, "SERVICE_UNAVAILABLE", "Сервис обработки видео временно недоступен") from exc
+
+    if response.is_error:
+        raise APIError(502, "AI_PROCESSING_ERROR", "Не удалось построить предпросмотр коррекции")
+    try:
+        data = response.json()
+    except ValueError as exc:
+        raise APIError(502, "AI_PROCESSING_ERROR", "AI Service вернул некорректный предпросмотр") from exc
+    if (
+        not isinstance(data, dict)
+        or data.get("status") != "completed"
+        or not isinstance(data.get("before_base64"), str)
+        or not isinstance(data.get("after_base64"), str)
+    ):
+        raise APIError(502, "AI_PROCESSING_ERROR", "AI Service вернул некорректный предпросмотр")
+    return {"before": data["before_base64"], "after": data["after_base64"]}
 
 
 @router.delete("/videos/{video_id}", status_code=status.HTTP_204_NO_CONTENT)

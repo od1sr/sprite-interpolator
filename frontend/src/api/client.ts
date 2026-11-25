@@ -1,5 +1,6 @@
 import type {
   AdaptationMode,
+  CreateJobStep,
   ExportJob,
   Job,
   ProjectPage,
@@ -39,7 +40,7 @@ export async function uploadVideo(file: File): Promise<Video> {
 
 export async function createJob(
   videoId: string,
-  steps: Array<{ type: 'upscale' | 'interpolate'; parameters: Record<string, number> }>,
+  steps: CreateJobStep[],
 ): Promise<Job> {
   const response = await fetch(`${BASE_URL}/jobs`, {
     method: 'POST',
@@ -47,6 +48,19 @@ export async function createJob(
     body: JSON.stringify({ video_id: videoId, steps }),
   });
   return handleResponse<Job>(response);
+}
+
+export async function getColorPreview(
+  videoId: string,
+  mode: 'preset' | 'smart',
+  preset: string | null,
+): Promise<{ before: string; after: string }> {
+  const response = await fetch(`${BASE_URL}/videos/${videoId}/color-preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode, preset: mode === 'preset' ? preset : null }),
+  });
+  return handleResponse<{ before: string; after: string }>(response);
 }
 
 export async function getJobStatus(jobId: string): Promise<Job> {

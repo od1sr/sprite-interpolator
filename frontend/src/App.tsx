@@ -12,6 +12,7 @@ import {
 } from './api/client';
 import type {
   AdaptationMode,
+  CreateJobStep,
   ExportJob,
   Job,
   Project,
@@ -160,6 +161,7 @@ function taskFilter(status: string): string {
 const STEP_LABELS: Record<string, string> = {
   upscale: 'Апскейл',
   interpolate: 'Интерполяция',
+  color_correct: 'Коррекция цвета',
 };
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -299,6 +301,8 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [scale, setScale] = useState<number>(2);
   const [fps, setFps] = useState<number>(0);
+  const [colorPreset, setColorPreset] = useState('');
+  const [smartColor, setSmartColor] = useState(false);
   const [profileIds, setProfileIds] = useState<string[]>([EXPORT_PROFILES[0].id]);
   const [adaptationMode, setAdaptationMode] = useState<AdaptationMode>('crop');
   const [processing, setProcessing] = useState(false);
@@ -308,13 +312,15 @@ export default function App() {
   const uploadSequence = useRef(0);
 
   const selectedProfiles = EXPORT_PROFILES.filter((profile) => profileIds.includes(profile.id));
-  const hasPipelineSteps = scale > 1 || fps > 0;
+  const hasPipelineSteps = scale > 1 || fps > 0 || smartColor || Boolean(colorPreset);
 
   const handleFile = (selectedFile: File) => {
     const token = ++uploadSequence.current;
     setFile(selectedFile);
     setVideo(null);
     setJob(null);
+    setColorPreset('');
+    setSmartColor(false);
     setProcessing(false);
     setUploading(true);
     setError(null);
@@ -344,10 +350,16 @@ export default function App() {
     try {
       const sourceVideo = video;
 
-      const steps: Array<{ type: 'upscale' | 'interpolate'; parameters: Record<string, number> }> = [];
-      // Interpolate first at the source resolution, then upscale the result.
+      const steps: CreateJobStep[] = [];
+      // Interpolate first at the source resolution, then upscale and correct color.
       if (fps > 0) steps.push({ type: 'interpolate', parameters: { target_fps: Number(fps) } });
       if (scale > 1) steps.push({ type: 'upscale', parameters: { scale: Number(scale) } });
+      // Color correction is always the last step of the pipeline.
+      if (smartColor) {
+        steps.push({ type: 'color_correct', parameters: { mode: 'smart' } });
+      } else if (colorPreset) {
+        steps.push({ type: 'color_correct', parameters: { mode: 'preset', preset: colorPreset } });
+      }
 
       const createdJob = await createJob(sourceVideo.id, steps);
       setJob(createdJob);
@@ -622,6 +634,10 @@ export default function App() {
         setScale={setScale}
         fps={fps}
         setFps={setFps}
+        colorPreset={colorPreset}
+        setColorPreset={setColorPreset}
+        smartColor={smartColor}
+        setSmartColor={setSmartColor}
         processing={processing}
         uploading={uploading}
         hasPipelineSteps={hasPipelineSteps}

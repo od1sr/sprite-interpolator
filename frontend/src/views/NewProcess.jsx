@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Dropzone from '../components/Dropzone';
+import { getColorPreview } from '../api/client';
 
 const SCALE_OPTIONS = [
   { value: 1, label: 'Не применять' },
   { value: 2, label: '2×' },
   { value: 4, label: '4×' },
+];
+
+const COLOR_PRESET_OPTIONS = [
+  { value: '', label: 'Не применять' },
+  { value: 'natural', label: 'Естественная' },
+  { value: 'cinema', label: 'Кино' },
+  { value: 'vivid', label: 'Яркая' },
+  { value: 'warm', label: 'Тёплая' },
+  { value: 'cool', label: 'Холодная' },
 ];
 
 const FPS_MULTIPLIERS = [2, 4, 8, 16];
@@ -165,6 +175,10 @@ export default function NewProcess({
   setScale,
   fps,
   setFps,
+  colorPreset,
+  setColorPreset,
+  smartColor,
+  setSmartColor,
   processing,
   uploading,
   hasPipelineSteps,
@@ -180,6 +194,11 @@ export default function NewProcess({
   const sourceFps = video?.fps;
   const fpsOptions = useMemo(() => buildFpsOptions(sourceFps), [sourceFps]);
   const previousSourceFps = useRef(null);
+  const [previewUrls, setPreviewUrls] = useState(null);
+  const [previewView, setPreviewView] = useState('after');
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState(null);
+  const previewSequence = useRef(0);
 
   useEffect(() => {
     const sourceChanged = Boolean(sourceFps) && previousSourceFps.current !== sourceFps;
@@ -190,6 +209,37 @@ export default function NewProcess({
       setFps(fpsOptions[1]?.value ?? 0);
     }
   }, [fpsOptions, fps, sourceFps, setFps]);
+
+  useEffect(() => {
+    const token = ++previewSequence.current;
+    setPreviewUrls(null);
+    setPreviewError(null);
+    if (!video?.id) return undefined;
+
+    setPreviewLoading(true);
+    getColorPreview(video.id, smartColor ? 'smart' : 'preset', colorPreset || null)
+      .then((result) => {
+        if (token !== previewSequence.current) return;
+        setPreviewUrls({
+          before: `data:image/jpeg;base64,${result.before}`,
+          after: `data:image/jpeg;base64,${result.after}`,
+        });
+      })
+      .catch((previewFailure) => {
+        if (token !== previewSequence.current) return;
+        console.error('Ошибка предпросмотра коррекции цвета:', previewFailure);
+        setPreviewError(
+          `Не удалось получить кадр из видео: ${previewFailure?.message || 'неизвестная ошибка'}`,
+        );
+      })
+      .finally(() => {
+        if (token === previewSequence.current) setPreviewLoading(false);
+      });
+
+    return () => { previewSequence.current += 1; };
+  }, [video?.id, colorPreset, smartColor]);
+
+  const shownPreviewUrl = previewView === 'before' ? previewUrls?.before : previewUrls?.after;
 
   return (
     <div>
@@ -285,6 +335,58 @@ export default function NewProcess({
               onChange={setFps}
               disabled={processing}
             />
+          </div>
+
+          <div className="opt">
+            <div className="opt-head preview-head">
+              <b>Коррекция цвета</b>
+              <div className="preview-toggle" role="group" aria-label="Предпросмотр коррекции цвета">
+                <button
+                  type="button"
+                  className={previewView === 'before' ? 'active' : ''}
+                  onClick={() => setPreviewView('before')}
+                >
+                  До
+                </button>
+                <button
+                  type="button"
+                  className={previewView === 'after' ? 'active' : ''}
+                  onClick={() => setPreviewView('after')}
+                >
+                  После
+                </button>
+              </div>
+            </div>
+            <div className="color-preview">
+              {previewLoading && <div className="preview-status">Загрузка кадра…</div>}
+              {previewError && <div className="preview-status">{previewError}</div>}
+              {!previewLoading && !previewError && shownPreviewUrl && (
+                <>
+                  <img
+                    src={shownPreviewUrl}
+                    alt={previewView === 'before' ? 'Кадр до коррекции цвета' : 'Кадр после коррекции цвета'}
+                  />
+                  <span className="preview-badge">{previewView === 'before' ? 'До' : 'После'}</span>
+                </>
+              )}
+            </div>
+            <p>Готовый пресет или автоматическая коррекция</p>
+            <StyledSelect
+              label="Пресет коррекции цвета"
+              value={colorPreset}
+              options={COLOR_PRESET_OPTIONS}
+              onChange={setColorPreset}
+              disabled={processing || smartColor}
+            />
+            <label className={`smart-check${smartColor ? ' selected' : ''}`}>
+              <input
+                type="checkbox"
+                checked={smartColor}
+                onChange={(event) => setSmartColor(event.target.checked)}
+                disabled={processing}
+              />
+              <span>Умная коррекция</span>
+            </label>
           </div>
         </div>
 

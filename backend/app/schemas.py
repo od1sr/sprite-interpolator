@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
+from app.config import COLOR_PRESETS, STEP_ORDER
+
 
 class APIModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -39,7 +41,7 @@ class VideoPage(APIModel):
 
 
 class StepInput(BaseModel):
-    type: Literal["upscale", "interpolate"]
+    type: Literal["upscale", "interpolate", "color_correct"]
     parameters: dict[str, Any]
 
     @field_validator("parameters")
@@ -68,6 +70,24 @@ class StepInput(BaseModel):
                 or target_fps <= 0
             ):
                 raise ValueError("target_fps должен быть положительным конечным числом")
+        elif step_type == "color_correct":
+            mode = parameters.get("mode")
+            if mode not in ("preset", "smart"):
+                raise ValueError("mode должен быть preset или smart")
+            if mode == "smart":
+                if set(parameters) != {"mode"}:
+                    raise ValueError("Для умной коррекции требуется только mode")
+            else:
+                preset = parameters.get("preset")
+                if (
+                    set(parameters) != {"mode", "preset"}
+                    or not isinstance(preset, str)
+                    or preset not in COLOR_PRESETS
+                ):
+                    raise ValueError(
+                        "Недопустимый пресет коррекции цвета. "
+                        f"Допустимые пресеты: {', '.join(COLOR_PRESETS)}"
+                    )
         elif step_type == "format":
             if set(parameters) != {"platform", "resolution"}:
                 raise ValueError("Для format требуются параметры platform и resolution")
@@ -78,9 +98,20 @@ class StepInput(BaseModel):
         return parameters
 
 
+class ColorPreviewRequest(BaseModel):
+    mode: Literal["preset", "smart"] = "preset"
+    preset: str | None = None
+
+
 class JobCreate(BaseModel):
     video_id: UUID
     steps: list[StepInput] = Field(min_length=1)
+
+    @field_validator("steps")
+    @classmethod
+    def order_steps(cls, steps: list[StepInput]) -> list[StepInput]:
+        """Always run interpolate, then upscale, then color correction."""
+        return sorted(steps, key=lambda step: STEP_ORDER.get(step.type, len(STEP_ORDER)))
 
 
 class StepResponse(APIModel):

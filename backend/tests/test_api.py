@@ -1,6 +1,7 @@
 from dataclasses import replace
 from uuid import UUID, uuid4
 
+import pytest
 from sqlalchemy import select
 
 from app.models import ExportJob, Job, Result, Video
@@ -38,6 +39,65 @@ def test_upload_list_and_get_video(client, monkeypatch):
     assert "storage_key" not in video
     assert test_client.get("/api/v1/videos").json()["total"] == 1
     assert test_client.get(f"/api/v1/videos/{video['id']}").json()["id"] == video["id"]
+
+
+def test_color_preview_proxies_ai_frames(client, monkeypatch):
+    from app import api
+
+    test_client, _ = client
+    video_id = upload(test_client, monkeypatch).json()["id"]
+    calls = []
+
+    class FakeResponse:
+        is_error = False
+
+        @staticmethod
+        def json():
+            return {
+                "status": "completed",
+                "before_base64": "before",
+                "after_base64": "after",
+            }
+
+    def fake_post(url, json, timeout):
+        calls.append((url, json, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr(api.httpx, "post", fake_post)
+
+    response = test_client.post(
+        f"/api/v1/videos/{video_id}/color-preview",
+        json={"mode": "preset", "preset": "cinema"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"before": "before", "after": "after"}
+    assert calls[0][1]["params"] == {"mode": "preset", "preset": "cinema"}
+
+    response = test_client.post(
+        f"/api/v1/videos/{video_id}/color-preview",
+        json={"mode": "preset", "preset": None},
+    )
+    assert response.status_code == 200
+    assert calls[1][1]["params"] == {"mode": "preset", "preset": None}
+
+    response = test_client.post(
+        f"/api/v1/videos/{video_id}/color-preview",
+        json={"mode": "smart"},
+    )
+    assert response.status_code == 200
+    assert calls[2][1]["params"] == {"mode": "smart", "preset": None}
+
+
+def test_color_preview_rejects_unknown_preset(client, monkeypatch):
+    test_client, _ = client
+    video_id = upload(test_client, monkeypatch).json()["id"]
+
+    response = test_client.post(
+        f"/api/v1/videos/{video_id}/color-preview",
+        json={"mode": "preset", "preset": "unknown"},
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
 def test_upload_rejects_unsupported_file_without_writing_to_storage(client, monkeypatch):
@@ -121,6 +181,67 @@ def test_create_job_validates_pipeline_and_enqueues(client, monkeypatch):
     assert invalid.json()["error"]["code"] == "VALIDATION_ERROR"
     with sessions() as session:
         assert len(session.scalars(select(Job)).all()) == 1
+
+
+def test_create_job_accepts_color_correction_and_orders_steps(client, monkeypatch):
+    test_client, _ = client
+    from app import api
+
+    monkeypatch.setattr(api.process_job, "apply_async", lambda args: None)
+    video_id = upload(test_client, monkeypatch).json()["id"]
+    response = test_client.post(
+        "/api/v1/jobs",
+        json={
+            "video_id": video_id,
+            "steps": [
+                {"type": "color_correct", "parameters": {"mode": "preset", "preset": "cinema"}},
+                {"type": "upscale", "parameters": {"scale": 2}},
+                {"type": "interpolate", "parameters": {"target_fps": 60}},
+            ],
+        },
+    )
+    assert response.status_code == 202
+    steps = response.json()["steps"]
+    assert [step["type"] for step in steps] == ["interpolate", "upscale", "color_correct"]
+    assert steps[2]["parameters"] == {"mode": "preset", "preset": "cinema"}
+
+    smart = test_client.post(
+        "/api/v1/jobs",
+        json={
+            "video_id": video_id,
+            "steps": [{"type": "color_correct", "parameters": {"mode": "smart"}}],
+        },
+    )
+    assert smart.status_code == 202
+    assert smart.json()["steps"][0]["parameters"] == {"mode": "smart"}
+
+
+@pytest.mark.parametrize(
+    "parameters",
+    [
+        {"mode": "preset", "preset": "unknown"},
+        {"mode": "preset"},
+        {"mode": "smart", "preset": "cinema"},
+        {"mode": "auto"},
+        {"mode": "preset", "preset": "cinema", "brightness": 10},
+    ],
+)
+def test_create_job_rejects_invalid_color_parameters(client, monkeypatch, parameters):
+    test_client, sessions = client
+    from app import api
+
+    monkeypatch.setattr(api.process_job, "apply_async", lambda args: None)
+    video_id = upload(test_client, monkeypatch).json()["id"]
+    response = test_client.post(
+        "/api/v1/jobs",
+        json={"video_id": video_id, "steps": [
+            {"type": "color_correct", "parameters": parameters},
+        ]},
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    with sessions() as session:
+        assert session.scalar(select(Job)) is None
 
 
 def test_create_job_rejects_unsupported_fps_multiplier(client, monkeypatch):

@@ -3,7 +3,12 @@
 
 export type JobStatus = 'queued' | 'processing' | 'completed' | 'failed' | 'cancelling' | 'cancelled';
 
-export type StepType = 'upscale' | 'interpolate';
+export type StepType = 'upscale' | 'interpolate' | 'color_correct';
+
+export interface CreateJobStep {
+  type: StepType;
+  parameters: Record<string, number | string>;
+}
 
 
 export interface Video {
@@ -32,7 +37,7 @@ export interface JobError {
 export interface PipelineStep {
   type: StepType;
   status: 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
-  parameters: Record<string, number>;
+  parameters: Record<string, number | string>;
   progress?: number;
   error?: JobError | null;
   started_at: string | null;

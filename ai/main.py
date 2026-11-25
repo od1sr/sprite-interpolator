@@ -1,13 +1,21 @@
 # main.py
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+import base64
 import logging
 import os
 from contextlib import asynccontextmanager
 
 from pathlib import Path
 
+import cv2
+
 from cancellation import ProcessingCancelled
+from color_corrector import (
+    PRESETS as COLOR_PRESETS,
+    VideoColorCorrector,
+    make_preview_frames,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ai")
@@ -100,6 +108,8 @@ def models():
              "available": upscaler_model is not None},
             {"name": "rife", "operation": "interpolate",
              "available": interpolator_model is not None},
+            {"name": "lut", "operation": "color_correct",
+             "available": True, "presets": list(COLOR_PRESETS)},
         ]
     }
 
@@ -165,5 +175,85 @@ def interpolate(request_data: dict):
         if "out of memory" in str(e).lower():
             return _error(507, "cuda_oom", f"CUDA OOM: {e}")
         return _error(500, "processing_failed", str(e))
+    except Exception as e:
+        return _error(500, "processing_failed", str(e))
+
+
+@app.post("/internal/v1/color_correct")
+def color_correct(request_data: dict):
+    input_uri = request_data.get("input_uri")
+    output_uri = request_data.get("output_uri")
+    params = request_data.get("params", {})
+    cancel_uri = request_data.get("cancel_uri")
+
+    if not input_uri or not output_uri:
+        return _error(400, "bad_request", "input_uri and output_uri are required")
+    if not os.path.exists(input_uri):
+        return _error(404, "input_not_found", f"input file not found: {input_uri}")
+
+    mode = params.get("mode", "preset")
+    if mode not in ("preset", "smart"):
+        return _error(400, "bad_params", "mode must be preset or smart")
+    preset = params.get("preset")
+    if mode == "preset":
+        if not isinstance(preset, str) or preset not in COLOR_PRESETS:
+            return _error(
+                400, "bad_params",
+                f"unknown color preset: {preset}. Available: {', '.join(COLOR_PRESETS)}",
+            )
+    elif preset is not None:
+        return _error(400, "bad_params", "preset is not allowed in smart mode")
+
+    try:
+        return VideoColorCorrector().process(
+            input_uri, output_uri, mode=mode, preset=preset, cancel_uri=cancel_uri
+        )
+    except ProcessingCancelled:
+        return _error(409, "cancelled", "Обработка отменена")
+    except ValueError as e:
+        return _error(400, "bad_params", str(e))
+    except Exception as e:
+        return _error(500, "processing_failed", str(e))
+
+
+@app.post("/internal/v1/color_preview")
+def color_preview(request_data: dict):
+    """Return one frame before and after correction as base64 JPEGs."""
+    input_uri = request_data.get("input_uri")
+    if not input_uri:
+        return _error(400, "bad_request", "input_uri is required")
+    if not os.path.exists(input_uri):
+        return _error(404, "input_not_found", f"input file not found: {input_uri}")
+
+    params = request_data.get("params", {})
+    mode = params.get("mode", "preset")
+    preset = params.get("preset")
+    if mode not in ("preset", "smart"):
+        return _error(400, "bad_params", "mode must be preset or smart")
+    if mode == "preset":
+        if preset not in (None, "") and (
+            not isinstance(preset, str) or preset not in COLOR_PRESETS
+        ):
+            return _error(400, "bad_params", f"unknown color preset: {preset}")
+    elif preset is not None:
+        return _error(400, "bad_params", "preset is not allowed in smart mode")
+
+    try:
+        before, after = make_preview_frames(input_uri, mode, preset)
+        def encode(frame) -> str:
+            ok, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 88])
+            if not ok:
+                raise RuntimeError("JPEG encoding failed")
+            return base64.b64encode(buffer.tobytes()).decode("ascii")
+
+        return {
+            "status": "completed",
+            "before_base64": encode(before),
+            "after_base64": encode(after),
+            "width": before.shape[1],
+            "height": before.shape[0],
+        }
+    except (ValueError, IOError) as e:
+        return _error(400, "processing_failed", str(e))
     except Exception as e:
         return _error(500, "processing_failed", str(e))

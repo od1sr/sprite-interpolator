@@ -34,6 +34,12 @@ class Settings:
 
 settings = Settings()
 
+# Color-correction presets shared by API validation and the AI service.
+COLOR_PRESETS = ("natural", "cinema", "vivid", "warm", "cool")
+
+# Steps are always executed in this order, regardless of the order sent by the client.
+STEP_ORDER = {"interpolate": 0, "upscale": 1, "color_correct": 2}
+
 # app/config.py
 
 EXPORT_PROFILES = {

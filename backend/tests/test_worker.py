@@ -100,6 +100,50 @@ def test_worker_processes_pipeline_and_persists_result(worker_context, monkeypat
     assert not (root / "jobs" / str(job_id)).exists()
 
 
+def test_worker_runs_color_correction_as_last_step(worker_context, monkeypatch):
+    worker, sessions, root, job_id = worker_context
+    with sessions.begin() as session:
+        job = session.get(Job, job_id)
+        steps = [dict(step) for step in job.steps]
+        steps.append({
+            "type": "color_correct",
+            "status": "queued",
+            "parameters": {"mode": "smart"},
+            "progress": 0,
+            "started_at": None,
+            "finished_at": None,
+            "error": None,
+        })
+        job.steps = steps
+
+    calls = []
+
+    def fake_ai_call(step_type, input_path, output_path, parameters, cancel_path=None):
+        calls.append((step_type, parameters))
+        output_path.write_bytes(b"processed")
+        return {
+            "status": "completed",
+            "output_uri": str(output_path),
+            "size_bytes": len(b"processed"),
+            "duration_seconds": 2.5,
+            "width": 2560,
+            "height": 1440,
+            "fps": 30,
+        }
+
+    monkeypatch.setattr(worker, "_call_ai", fake_ai_call)
+    worker.process_job.run(str(job_id))
+
+    assert calls == [
+        ("upscale", {"scale": 2}),
+        ("color_correct", {"mode": "smart"}),
+    ]
+    with sessions() as session:
+        job = session.scalar(select(Job).where(Job.id == job_id))
+        assert [step["type"] for step in job.steps] == ["upscale", "color_correct"]
+        assert job.status == "completed"
+
+
 def test_ai_client_uses_documented_request_and_validates_shared_output(worker_context, monkeypatch):
     worker, _, root, _ = worker_context
     output_path = root / "jobs" / "ai-output.mp4"
