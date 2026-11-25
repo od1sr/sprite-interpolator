@@ -384,13 +384,27 @@ def cancel_job(job_id: UUID, session: Session = Depends(get_session)) -> Job:
     else:
         job.status = "cancelling"
         job.message = "Запрошена отмена задачи"
+
+    exports = session.scalars(
+        select(ExportJob).where(
+            ExportJob.job_id == job_id,
+            ExportJob.status.in_({"queued", "analyzing", "processing", "cancelling"}),
+        )
+    ).all()
+    for export in exports:
+        export.status = "cancelled"
+        export.user_message = "Задача отменена"
+        export.finished_at = datetime.now(timezone.utc)
+
     session.commit()
     session.refresh(job)
-    if job.status == "cancelled":
+    revoked_ids = [str(job.id)] if job.status == "cancelled" else []
+    revoked_ids.extend(str(export.id) for export in exports)
+    for task_id in revoked_ids:
         try:
-            celery_app.control.revoke(str(job.id), terminate=False)
+            celery_app.control.revoke(task_id, terminate=False)
         except Exception:
-            logger.exception("Unable to revoke queued job %s", job.id)
+            logger.exception("Unable to revoke cancelled task %s", task_id)
     return job
 
 

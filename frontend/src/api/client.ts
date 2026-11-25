@@ -59,6 +59,13 @@ export async function listProjects(): Promise<ProjectPage> {
   return handleResponse<ProjectPage>(response);
 }
 
+export async function cancelJob(jobId: string): Promise<Job> {
+  const response = await fetch(`${BASE_URL}/jobs/${jobId}/cancel`, {
+    method: 'POST',
+  });
+  return handleResponse<Job>(response);
+}
+
 export async function getJobResult(jobId: string): Promise<Result> {
   const response = await fetch(`${BASE_URL}/jobs/${jobId}/result`);
   return handleResponse<Result>(response);

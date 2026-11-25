@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  cancelJob,
   createJob,
   createVideoExport,
   getJobResult,
@@ -40,8 +41,6 @@ interface ExportProfile {
   codec: string;
 }
 
-type ExportTask = ExportJob;
-
 interface StepProgressView {
   type: string;
   status: string;
@@ -63,18 +62,23 @@ interface TaskView {
   createdAt: string;
 }
 
+function mergeExports(base: ExportJob[], updates: ExportJob[]): ExportJob[] {
+  const byId = new Map(base.map((task) => [task.id, task]));
+  for (const task of updates) byId.set(task.id, task);
+  return [...byId.values()];
+}
+
 function mergeProjects(current: Project[], incoming: Project[]): Project[] {
   const byId = new Map(current.map((project) => [project.id, project]));
-  const merged = incoming.map((project) => {
+  return incoming.map((project) => {
     const existing = byId.get(project.id);
     return {
       ...existing,
       ...project,
+      exports: mergeExports(existing?.exports ?? [], project.exports),
       download_url: project.download_url || existing?.download_url || null,
     };
   });
-  const missing = current.filter((project) => !incoming.some((item) => item.id === project.id));
-  return [...merged, ...missing];
 }
 
 const EXPORT_PROFILES: ExportProfile[] = [
@@ -187,7 +191,13 @@ function SubtaskRow({ task }: { task: TaskView }) {
   );
 }
 
-function TaskRow({ task }: { task: TaskView }) {
+function TaskRow({
+  task,
+  onCancel,
+}: {
+  task: TaskView;
+  onCancel?: (jobId: string) => void;
+}) {
   const isReady = task.status === 'ready' || task.status === 'completed';
   const isFailed = task.status === 'failed';
   const tone = isReady ? 'pill-ok' : isFailed ? 'pill-err' : task.status === 'queued' ? '' : 'pill-run';
@@ -250,6 +260,15 @@ function TaskRow({ task }: { task: TaskView }) {
           <span className="pct">{Math.round(isReady ? 100 : progress)}%</span>
         </div>
       )}
+      {['queued', 'processing', 'cancelling'].includes(task.status) && onCancel && (
+        <button
+          className="btn btn-ghost btn-sm task-cancel"
+          onClick={() => onCancel(task.id)}
+          disabled={task.status === 'cancelling'}
+        >
+          {task.status === 'cancelling' ? 'Отмена…' : 'Отменить'}
+        </button>
+      )}
     </div>
     {task.subtasks && task.subtasks.length > 0 && (
       <div className="proj-subtasks">
@@ -268,9 +287,7 @@ export default function App() {
   const [file, setFile] = useState<File | null>(null);
   const [video, setVideo] = useState<Video | null>(null);
   const [job, setJob] = useState<Job | null>(null);
-  const [exportJobs, setExportJobs] = useState<ExportTask[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [projectsRequested, setProjectsRequested] = useState(false);
   const [scale, setScale] = useState<number>(2);
   const [fps, setFps] = useState<number>(60);
   const [profileIds, setProfileIds] = useState<string[]>([EXPORT_PROFILES[0].id]);
@@ -289,7 +306,6 @@ export default function App() {
     setFile(selectedFile);
     setVideo(null);
     setJob(null);
-    setExportJobs([]);
     setProcessing(false);
     setUploading(true);
     setError(null);
@@ -349,15 +365,14 @@ export default function App() {
       setView('projects');
 
       if (selectedProfiles.length) {
-        const outcomes = await Promise.allSettled(selectedProfiles.map(async (profile): Promise<ExportTask> => {
+        const outcomes = await Promise.allSettled(selectedProfiles.map(async (profile): Promise<ExportJob> => {
           return createVideoExport(sourceVideo.id, profile.id, adaptationMode, createdJob.id);
         }));
         const created = outcomes.flatMap((outcome) => outcome.status === 'fulfilled' ? [outcome.value] : []);
         const failures = outcomes.filter((outcome) => outcome.status === 'rejected');
-        setExportJobs((current) => [...created, ...current]);
         setProjects((current) => current.map((project) => (
           project.id === createdJob.id
-            ? { ...project, exports: [...created, ...project.exports] }
+            ? { ...project, exports: mergeExports(project.exports, created) }
             : project
         )));
         if (failures.length) {
@@ -424,10 +439,6 @@ export default function App() {
           setError(getErrorMessage(pollError, 'Не удалось обновить состояние экспорта'));
         }
       }));
-      setExportJobs((current) => current.map((task) => {
-        const updated = updates.get(task.id);
-        return updated || task;
-      }));
       setProjects((current) => current.map((project) => ({
         ...project,
         exports: project.exports.map((task) => updates.get(task.id) || task),
@@ -436,12 +447,14 @@ export default function App() {
     return () => window.clearInterval(interval);
   }, [pendingExportIds]);
 
-  // The form stays locked until both the AI job and all export jobs finish.
+  // The form stays locked until the active AI job and its exports finish.
   useEffect(() => {
-    const exportsAreDone = exportJobs.every((task) => ['ready', 'failed', 'cancelled'].includes(task.status));
-    const jobIsDone = !job || ['completed', 'failed', 'cancelled'].includes(job.status);
-    if (exportsAreDone && jobIsDone) setProcessing(false);
-  }, [exportJobs, job]);
+    if (!job || !['completed', 'failed', 'cancelled'].includes(job.status)) return;
+    const activeProject = projects.find((project) => project.id === job.id);
+    const exportsAreDone = (activeProject?.exports ?? [])
+      .every((task) => ['ready', 'failed', 'cancelled'].includes(task.status));
+    if (exportsAreDone) setProcessing(false);
+  }, [job, projects]);
 
   useEffect(() => {
     if (job?.status !== 'completed') return;
@@ -459,8 +472,7 @@ export default function App() {
   }, [job?.id, job?.status]);
 
   useEffect(() => {
-    if (view !== 'projects' || projectsRequested) return;
-    setProjectsRequested(true);
+    if (view !== 'projects') return;
     listProjects()
       .then((page) => {
         setProjects((current) => mergeProjects(current, page.items));
@@ -468,7 +480,7 @@ export default function App() {
       .catch((requestError: unknown) => {
         setError(getErrorMessage(requestError, 'Не удалось загрузить проекты'));
       });
-  }, [view, projectsRequested]);
+  }, [view]);
 
   const activeProjectsKey = projects
     .filter((project) => (
@@ -559,6 +571,28 @@ export default function App() {
     }));
   }, [tasks]);
 
+  const handleCancelJob = async (jobId: string) => {
+    try {
+      const updated = await cancelJob(jobId);
+      setJob((current) => (current?.id === jobId ? updated : current));
+      setProjects((current) => current.map((project) => (
+        project.id === jobId
+          ? {
+              ...project,
+              ...updated,
+              exports: project.exports.map((task) => (
+                ['queued', 'processing', 'cancelling'].includes(task.status)
+                  ? { ...task, status: 'cancelled', user_message: 'Задача отменена' }
+                  : task
+              )),
+            }
+          : project
+      )));
+    } catch (requestError) {
+      setError(getErrorMessage(requestError, 'Не удалось отменить обработку'));
+    }
+  };
+
   const handleQuickFile = (selectedFile: File) => {
     handleFile(selectedFile);
     setView('new');
@@ -566,7 +600,9 @@ export default function App() {
 
   const renderTaskList = (items: TaskView[]) => (
     items.length ? (
-      <div className="proj-list">{items.map((task) => <TaskRow key={task.id} task={task} />)}</div>
+      <div className="proj-list">
+        {items.map((task) => <TaskRow key={task.id} task={task} onCancel={handleCancelJob} />)}
+      </div>
     ) : (
       <div className="empty">Задач пока нет. Создайте обработку, чтобы она появилась здесь.</div>
     )
