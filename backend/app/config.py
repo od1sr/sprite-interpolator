@@ -70,5 +70,39 @@ EXPORT_PROFILES = {
         "crf": 18,
         "audio_bitrate": "192k",
         "allowed_modes": ["crop", "pad", "blur"]
+    },
+    "instagram_square_v1": {
+        "profile_id": "instagram_square_v1",
+        "platform": "instagram",
+        "content_type": "square",
+        "version": 1,
+        "container": "mp4",
+        "video_codec": "libx264",
+        "audio_codec": "aac",
+        "width": 1080,
+        "height": 1080,
+        "aspect_ratio": "1:1",
+        "fps_mode": "source",
+        "quality_mode": "crf",
+        "crf": 20,
+        "audio_bitrate": "160k",
+        "allowed_modes": ["crop", "pad", "blur"]
+    },
+    "instagram_feed_v1": {
+        "profile_id": "instagram_feed_v1",
+        "platform": "instagram",
+        "content_type": "feed_portrait",
+        "version": 1,
+        "container": "mp4",
+        "video_codec": "libx264",
+        "audio_codec": "aac",
+        "width": 1080,
+        "height": 1350,
+        "aspect_ratio": "4:5",
+        "fps_mode": "source",
+        "quality_mode": "crf",
+        "crf": 20,
+        "audio_bitrate": "160k",
+        "allowed_modes": ["crop", "pad", "blur"]
     }
 }

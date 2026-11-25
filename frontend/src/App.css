@@ -217,6 +217,10 @@
   font-size: 12px;
 }
 
+.mode-help {
+  margin-top: 18px;
+}
+
 .status-detail {
   margin-top: 10px;
   color: var(--muted);

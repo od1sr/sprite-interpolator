@@ -167,20 +167,6 @@ export default function NewProcess({
   exportJobsCount,
   onStart,
 }) {
-  const selectedProfiles = exportProfiles.filter((profile) => selectedProfileIds.includes(profile.id));
-
-  const setProfileOrientation = (aspectRatio) => {
-    setProfileIds(exportProfiles
-      .filter((profile) => profile.aspectRatio === aspectRatio)
-      .map((profile) => profile.id));
-  };
-
-  const isOrientationSelected = (aspectRatio) => {
-    const matchingProfiles = exportProfiles.filter((profile) => profile.aspectRatio === aspectRatio);
-    return selectedProfiles.length === matchingProfiles.length
-      && matchingProfiles.every((profile) => selectedProfileIds.includes(profile.id));
-  };
-
   return (
     <div>
       <div className="welcome">
@@ -193,9 +179,9 @@ export default function NewProcess({
 
       <div className="panel">
         <StepHeader
-          number="01"
+          number="1"
           title="Видео"
-          hint="MP4, MOV, WebM, до 2 ГБ"
+          hint="Загрузите видео которое хотите обработать"
         />
         <Dropzone
           title={file?.name || 'Перетащите видео сюда'}
@@ -247,7 +233,7 @@ export default function NewProcess({
 
       <div className="panel">
         <StepHeader
-          number="02"
+          number="2"
           title="Пайплайн"
           hint="Включите нужные модули"
         />
@@ -285,32 +271,13 @@ export default function NewProcess({
 
       <div className="panel">
         <StepHeader
-          number="03"
+          number="3"
           title="Экспорт"
-          hint="Необязательно, запускается вместе с обработкой"
+          hint="Выберите необходимые форматы для экспорта"
         />
 
-        <div className="format-presets">
-          <span>Быстрый выбор ориентации</span>
-          <button
-            type="button"
-            className={isOrientationSelected('16:9') ? 'active' : ''}
-            onClick={() => setProfileOrientation('16:9')}
-            disabled={processing}
-          >
-            Альбомная, 16:9
-          </button>
-          <button
-            type="button"
-            className={isOrientationSelected('9:16') ? 'active' : ''}
-            onClick={() => setProfileOrientation('9:16')}
-            disabled={processing}
-          >
-            Книжная, 9:16
-          </button>
-        </div>
         <p className="format-help">
-          Ориентация задаётся профилем экспорта. Способ вписывания изображения выберите ниже.
+          Выберите необходимые форматы экспорта
         </p>
         <div className="profile-options">
           {exportProfiles.map((profile) => (

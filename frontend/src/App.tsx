@@ -68,11 +68,29 @@ const EXPORT_PROFILES: ExportProfile[] = [
   },
   {
     id: 'tiktok_vertical_v1',
-    platform: 'TikTok',
+    platform: 'TikTok / ВКонтакте',
     contentType: 'Вертикальное видео',
-    title: 'TikTok — вертикальное',
+    title: 'TikTok / ВКонтакте — вертикальное',
     dimensions: '1080 × 1920',
     aspectRatio: '9:16',
+    codec: 'MP4, H.264, AAC',
+  },
+  {
+    id: 'instagram_square_v1',
+    platform: 'Instagram',
+    contentType: 'Квадратное видео',
+    title: 'Instagram — квадрат',
+    dimensions: '1080 × 1080',
+    aspectRatio: '1:1',
+    codec: 'MP4, H.264, AAC',
+  },
+  {
+    id: 'instagram_feed_v1',
+    platform: 'Instagram',
+    contentType: 'Вертикаль для ленты',
+    title: 'Instagram — лента 4:5',
+    dimensions: '1080 × 1350',
+    aspectRatio: '4:5',
     codec: 'MP4, H.264, AAC',
   },
 ];
@@ -286,6 +304,7 @@ export default function App() {
       if (scale > 1) steps.push({ type: 'upscale', parameters: { scale: Number(scale) } });
 
       setJob(await createJob(sourceVideo.id, steps));
+      setView('projects');
 
       if (selectedProfiles.length) {
         const outcomes = await Promise.allSettled(selectedProfiles.map(async (profile): Promise<ExportTask> => {
@@ -456,16 +475,6 @@ export default function App() {
     )
   );
 
-  const renderWorkflowStatus = () => {
-    const visibleTasks = tasks;
-    return visibleTasks.length ? (
-      <section className="panel">
-        <div className="panel-head"><h3>Статус обработки</h3></div>
-        {renderTaskList(visibleTasks)}
-      </section>
-    ) : null;
-  };
-
   const renderProcessView = () => (
     <>
       <NewProcess
@@ -488,7 +497,6 @@ export default function App() {
         exportJobsCount={exportJobs.length}
         onStart={handleSubmit}
       />
-      {renderWorkflowStatus()}
     </>
   );
 
