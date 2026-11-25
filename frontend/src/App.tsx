@@ -171,15 +171,13 @@ function getErrorMessage(error: unknown, fallback: string): string {
 function SubtaskRow({ task }: { task: TaskView }) {
   const isReady = task.status === 'ready' || task.status === 'completed';
   const isFailed = task.status === 'failed';
-  const tone = isReady ? 'pill-ok' : isFailed ? 'pill-err' : task.status === 'queued' ? '' : 'pill-run';
   const progress = Math.max(0, Math.min(100, task.progress));
 
   return (
-    <div className="proj-subtask">
+    <div className={`proj-subtask proj-status-${taskFilter(task.status)}`}>
       <div className="proj-subtask-main">
         <div className="proj-name">
           <span className="truncate" title={task.name}>{task.name}</span>
-          <span className={`pill ${tone}`}>{STATUS_LABELS[task.status] || task.status}</span>
         </div>
         <div className="proj-meta">
           {task.kind}{task.message ? `, ${task.message}` : ''}
@@ -210,18 +208,16 @@ function TaskRow({
 }) {
   const isReady = task.status === 'ready' || task.status === 'completed';
   const isFailed = task.status === 'failed';
-  const tone = isReady ? 'pill-ok' : isFailed ? 'pill-err' : task.status === 'queued' ? '' : 'pill-run';
   const progress = Math.max(0, Math.min(100, task.progress));
   const showSteps = Boolean(task.steps && task.steps.length > 0);
 
   return (
     <>
-    <div className="proj">
+    <div className={`proj proj-status-${taskFilter(task.status)}`}>
       <div className="thumb" aria-hidden="true" />
       <div className="proj-main">
         <div className="proj-name">
           <span className="truncate" title={task.name}>{task.name}</span>
-          <span className={`pill ${tone}`}>{STATUS_LABELS[task.status] || task.status}</span>
         </div>
         <div className="proj-meta">
           {task.kind}, {task.message || `Задача ${task.id.slice(0, 8)}`}
@@ -665,7 +661,6 @@ export default function App() {
     <>
       <Projects filter={projectFilter} onFilterChange={setProjectFilter} />
       <section className="panel">
-        <div className="panel-head"><h3>Текущие задачи</h3></div>
         {renderTaskList(
           projectFilter === 'all'
             ? tasks

@@ -338,8 +338,8 @@ export default function NewProcess({
           </div>
 
           <div className="opt">
-            <div className="opt-head preview-head">
-              <b>Коррекция цвета</b>
+            <div className="opt-head"><b>Коррекция цвета</b></div>
+            <div className="color-preview">
               <div className="preview-toggle" role="group" aria-label="Предпросмотр коррекции цвета">
                 <button
                   type="button"
@@ -356,8 +356,6 @@ export default function NewProcess({
                   После
                 </button>
               </div>
-            </div>
-            <div className="color-preview">
               {previewLoading && <div className="preview-status">Загрузка кадра…</div>}
               {previewError && <div className="preview-status">{previewError}</div>}
               {!previewLoading && !previewError && shownPreviewUrl && (
@@ -366,7 +364,6 @@ export default function NewProcess({
                     src={shownPreviewUrl}
                     alt={previewView === 'before' ? 'Кадр до коррекции цвета' : 'Кадр после коррекции цвета'}
                   />
-                  <span className="preview-badge">{previewView === 'before' ? 'До' : 'После'}</span>
                 </>
               )}
             </div>
