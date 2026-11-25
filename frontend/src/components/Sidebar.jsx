@@ -15,7 +15,7 @@ export default function Sidebar({ currentView, setView, user, getPlan, onLogout 
     { id: 'dashboard', label: 'Обзор', icon: 'M3 3h7.5v7.5H3zM13.5 3h7.5v7.5h-7.5zM3 13.5h7.5v7.5H3zM13.5 13.5h7.5v7.5h-7.5z' },
     { id: 'new', label: 'Новая обработка', icon: 'M12 5v14M5 12h14' },
     { id: 'projects', label: 'Проекты', icon: 'M3 7.5A2 2 0 0 1 5 5.5h4l2 2.2h8a2 2 0 0 1 2 2v8.8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7.5Z' },
-    { id: 'settings', label: 'Настройки', icon: settingsIcon },
+    { id: 'settings', label: 'Настройки', icon: settingsIcon, mobileOnly: true },
     { id: 'billing', label: 'Тариф и оплата', icon: 'M2.5 5.5h19v13H2.5zM2.5 10h19' },
   ];
 
@@ -24,7 +24,11 @@ export default function Sidebar({ currentView, setView, user, getPlan, onLogout 
       <div className="brand side-brand"><span className="brand-mark"></span><span>Zarya</span></div>
       <div className="side-label">Рабочее пространство</div>
       {menuItems.map(item => (
-        <button key={item.id} className={`side-item ${currentView === item.id ? 'active' : ''}`} onClick={() => setView(item.id)}>
+        <button
+          key={item.id}
+          className={`side-item ${item.mobileOnly ? 'mobile-only' : ''} ${currentView === item.id ? 'active' : ''}`}
+          onClick={() => setView(item.id)}
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
             {typeof item.icon === 'string' ? <path d={item.icon}/> : item.icon}
           </svg>
@@ -35,6 +39,16 @@ export default function Sidebar({ currentView, setView, user, getPlan, onLogout 
         <div className="user-chip">
           <div className="avatar sm">{initials}</div>
           <div className="uc-info"><b>{user?.name}</b><span>Тариф {plan.name}</span></div>
+          <button
+            className={`chip-settings ${currentView === 'settings' ? 'active' : ''}`}
+            onClick={() => setView('settings')}
+            title="Настройки"
+            aria-label="Настройки"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              {settingsIcon}
+            </svg>
+          </button>
         </div>
         <button className="side-item" onClick={onLogout}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 16l-4-4 4-4"/><path d="M6 12h10"/></svg>
