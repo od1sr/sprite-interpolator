@@ -392,6 +392,7 @@ def process_export_job(_: Any, export_job_id: str) -> None:
             job.user_message = "Исходное видео не найдено"
             session.commit()
             return
+        duration_seconds = video.duration_seconds
 
         job.status = "analyzing"
         job.started_at = _now()
@@ -412,16 +413,39 @@ def process_export_job(_: Any, export_job_id: str) -> None:
                 job.finished_at = _now()
                 session.commit()
                 return
+            duration_seconds = result.duration_seconds or duration_seconds
             input_path = result_path
 
         output_dir = settings.storage_root / "exports" / str(job.id)
         output_path = output_dir / "result.mp4"
 
+        def report_progress(percent: float) -> None:
+            """Persist the export percentage so the UI can poll it."""
+            if job.status in {"cancelled", "cancelling"}:
+                return
+            value = round(min(99.0, max(0.0, percent)), 1)
+            if value <= job.progress:
+                return
+            job.progress = value
+            try:
+                session.commit()
+            except Exception:
+                logger.exception("Не удалось сохранить прогресс экспорта %s", job.id)
+                session.rollback()
+
         try:
             output_dir.mkdir(parents=True, exist_ok=True)
             job.status = "processing"
+            job.progress = 0
             session.commit()
-            run_ffmpeg_export(input_path, output_path, job.config_snapshot, job.adaptation_mode)
+            run_ffmpeg_export(
+                input_path,
+                output_path,
+                job.config_snapshot,
+                job.adaptation_mode,
+                progress_callback=report_progress,
+                duration_seconds=duration_seconds,
+            )
             if not output_path.is_file() or output_path.stat().st_size == 0:
                 raise RuntimeError("FFmpeg не создал файл результата")
 

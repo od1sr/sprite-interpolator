@@ -221,12 +221,6 @@
   margin-top: 18px;
 }
 
-.status-detail {
-  margin-top: 10px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
 .panel .panel-foot .estimate {
   flex: 1 1 260px;
 }

@@ -278,7 +278,7 @@ def test_export_worker_runs_ffmpeg_and_persists_download_path(worker_context, mo
             )
         )
 
-    def fake_export(input_path, output_path, config, mode):
+    def fake_export(input_path, output_path, config, mode, **kwargs):
         assert input_path.is_file()
         assert config == profile
         assert mode == "blur"
@@ -293,6 +293,36 @@ def test_export_worker_runs_ffmpeg_and_persists_download_path(worker_context, mo
         assert export.progress == 100
         assert export.output_path == f"exports/{export_id}/result.mp4"
         assert (root / export.output_path).read_bytes() == b"adapted"
+
+
+def test_export_worker_persists_intermediate_progress(worker_context, monkeypatch):
+    worker, sessions, root, _ = worker_context
+    export_id = uuid4()
+    with sessions.begin() as session:
+        video = session.scalar(select(Video))
+        session.add(
+            ExportJob(
+                id=export_id,
+                video_id=video.id,
+                profile_id="youtube_standard_v1",
+                config_snapshot={},
+                adaptation_mode="crop",
+                status="queued",
+            )
+        )
+
+    observed = []
+
+    def fake_export(input_path, output_path, config, mode, *, progress_callback=None, duration_seconds=None):
+        progress_callback(42.3)
+        with sessions() as check:
+            observed.append(check.get(ExportJob, export_id).progress)
+        output_path.write_bytes(b"adapted")
+
+    monkeypatch.setattr(worker, "run_ffmpeg_export", fake_export)
+    worker.process_export_job.run(str(export_id))
+
+    assert observed == [42.3]
 
 
 def test_export_worker_uses_linked_job_result(worker_context, monkeypatch):
@@ -333,7 +363,7 @@ def test_export_worker_uses_linked_job_result(worker_context, monkeypatch):
 
     seen = []
 
-    def fake_export(input_path, output_path, config, mode):
+    def fake_export(input_path, output_path, config, mode, **kwargs):
         seen.append(input_path.read_bytes())
         output_path.write_bytes(b"adapted")
 

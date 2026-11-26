@@ -11,14 +11,9 @@ const TABS = [
 
 export default function Projects({ filter, onFilterChange }) {
   return (
-    <div>
-      <div className="welcome">
-        <div>
-          <span className="welcome-eyebrow">Архив</span>
-          <h2 className="welcome-title">Проекты</h2>
-          <p className="welcome-sub">Все ваши обработки в одном месте.</p>
-        </div>
-      </div>
+    <div className="projects-head">
+      <span className="welcome-eyebrow">Архив / Все обработки</span>
+      <p className="welcome-sub">Каждая обработка — отдельный проект со своими экспортами.</p>
 
       <div className="tabs">
         {TABS.map(tab => (

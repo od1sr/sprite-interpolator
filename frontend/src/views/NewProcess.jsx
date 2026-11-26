@@ -190,7 +190,6 @@ export default function NewProcess({
   adaptationMode,
   setAdaptationMode,
   adaptationModes,
-  exportJobsCount,
   onStart,
 }) {
   const sourceFps = video?.fps;
@@ -256,13 +255,16 @@ export default function NewProcess({
   const shownPreviewUrl = previewView === 'before' ? previewUrls?.before : previewUrls?.after;
 
   return (
-    <div>
-      <div className="welcome">
-        <div>
-          <span className="welcome-eyebrow">Обработка</span>
-          <h2 className="welcome-title">Новая обработка</h2>
+    <div className="workbench">
+      <div className="workbench-intro">
+        <span className="welcome-eyebrow">Рабочий стол</span>
+        <p className="welcome-sub">
+          Соберите цепочку: интерполяция → апскейл → цвет. Затем выберите форматы экспорта.
+        </p>
+      </div>
 
-        </div>
+      <div className="flowline" aria-hidden="true">
+        <span>01 SOURCE</span><i /><span>02 PIPELINE</span><i /><span>03 EXPORT</span>
       </div>
 
       <div className="panel">
@@ -486,12 +488,6 @@ export default function NewProcess({
         {adaptationMode === 'crop' && (
           <div className="notice warning" style={{ marginTop: 14 }}>
             При центральном кадрировании часть изображения может быть обрезана.
-          </div>
-        )}
-
-        {exportJobsCount > 0 && (
-          <div className="status-detail">
-            Экспортов в текущей сессии: {exportJobsCount}, каждая задача обрабатывается отдельно.
           </div>
         )}
 

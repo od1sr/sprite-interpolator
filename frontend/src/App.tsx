@@ -137,19 +137,6 @@ const VIEW_TITLES: Record<View, string> = {
   billing: 'Тариф и оплата',
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  queued: 'В очереди',
-  analyzing: 'Анализ видео',
-  preparing: 'Подготовка',
-  processing: 'В обработке',
-  validating: 'Проверка результата',
-  completed: 'Готово',
-  ready: 'Готово',
-  failed: 'Ошибка',
-  cancelling: 'Отмена',
-  cancelled: 'Отменено',
-};
-
 function taskFilter(status: string): string {
   if (status === 'ready' || status === 'completed') return 'done';
   if (status === 'failed') return 'err';
@@ -237,22 +224,21 @@ function TaskRow({
               ? 100
               : Math.max(0, Math.min(100, step.progress));
             const timeLabel = stepDone && step.elapsedSeconds != null
-              ? ` · ${formatDuration(step.elapsedSeconds)}`
-              : null;
-            const statusLabel = step.status === 'processing' && step.remainingSeconds != null
-              ? `осталось ${formatDuration(step.remainingSeconds)}`
-              : `${stepDone ? 'Готово' : STATUS_LABELS[step.status] || step.status}${timeLabel ?? ''}`;
+              ? formatDuration(step.elapsedSeconds)
+              : step.status === 'processing' && step.remainingSeconds != null
+                ? `~${formatDuration(step.remainingSeconds)}`
+                : null;
             return (
               <div key={`${task.id}-${step.type}-${index}`} className="proj-step">
                 <div className="proj-step-head">
                   <span>{STEP_LABELS[step.type] || step.type}</span>
-                  <span>{statusLabel}</span>
+                  <span className="pct">{Math.round(stepProgress)}%</span>
                 </div>
                 <div className="proj-step-bar">
                   <div className={`bar${stepDone ? ' done' : step.status === 'processing' ? ' active' : ''}`}>
                     <i style={{ width: `${stepProgress}%` }} />
                   </div>
-                  <span className="pct">{Math.round(stepProgress)}%</span>
+                  {timeLabel && <span className="step-time">{timeLabel}</span>}
                 </div>
               </div>
             );
@@ -651,7 +637,6 @@ export default function App() {
         adaptationMode={adaptationMode}
         setAdaptationMode={setAdaptationMode}
         adaptationModes={ADAPTATION_MODES}
-        exportJobsCount={selectedProfiles.length}
         onStart={handleSubmit}
       />
     </>
@@ -666,16 +651,16 @@ export default function App() {
   );
 
   const renderProjects = () => (
-    <>
+    <div className="projects-page">
       <Projects filter={projectFilter} onFilterChange={setProjectFilter} />
-      <section className="panel">
+      <section className="panel projects-panel">
         {renderTaskList(
           projectFilter === 'all'
             ? tasks
             : tasks.filter((task) => taskFilter(task.status) === projectFilter),
         )}
       </section>
-    </>
+    </div>
   );
 
   const renderView = () => {
@@ -735,7 +720,9 @@ export default function App() {
       />
       <div className="app-main">
         <header className="topbar">
-          <h1>{VIEW_TITLES[view]}</h1>
+          <div className="topbar-id">
+            <h1>{VIEW_TITLES[view]}</h1>
+          </div>
           <div className="topbar-actions">
             <button className="btn btn-ghost btn-sm" onClick={handleLogout}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">

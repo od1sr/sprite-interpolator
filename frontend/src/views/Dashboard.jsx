@@ -20,10 +20,29 @@ export default function Dashboard({ user, projects, onNewProcess }) {
       </div>
 
       <div className="stats">
-        <div className="stat"><div className="stat-label">Обработок в этой сессии</div><div className="stat-val">{projects.length}</div></div>
-        <div className="stat"><div className="stat-label">В обработке</div><div className="stat-val">{activeCount}</div></div>
-        <div className="stat"><div className="stat-label">Завершено</div><div className="stat-val">{completedCount}</div></div>
-        <div className="stat"><div className="stat-label">С ошибкой</div><div className="stat-val">{failedCount}</div></div>
+        <div className="stat stat--total" data-code="Σ">
+          <div className="stat-label">Обработок в этой сессии</div>
+          <div className="stat-val">{projects.length}</div>
+          <div className="stat-foot"><span className="stat-dots" /> SESSION LOG</div>
+        </div>
+
+        <div className="stat stat--active" data-code="RUN">
+          <div className="stat-label">В обработке</div>
+          <div className="stat-val">{activeCount}</div>
+          <div className="stat-foot"><span className="live-dot" /> IN PROGRESS</div>
+        </div>
+
+        <div className="stat stat--done" data-code="OK">
+          <div className="stat-label">Завершено</div>
+          <div className="stat-val">{completedCount}</div>
+          <div className="stat-foot"><span className="stat-check">✓</span> COMPLETED</div>
+        </div>
+
+        <div className="stat stat--errors" data-code="ERR">
+          <div className="stat-label">С ошибкой</div>
+          <div className="stat-val">{failedCount}</div>
+          <div className="stat-foot"><span className="stat-warn">!</span> NEEDS REVIEW</div>
+        </div>
       </div>
     </div>
   );
