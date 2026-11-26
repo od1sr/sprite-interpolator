@@ -148,64 +148,150 @@ export default function Landing({ onAuthClick }) {
           </section>
 
           {/* Pricing */}
-          <section className="section" id="pricing">
+         <section className="section" id="pricing">
             <div className="wrap">
               <div className="sec-head">
                 <span className="eyebrow">Тарифы</span>
                 <h2>Прозрачно и без сюрпризов</h2>
                 <p className="sub">
-                  Начните бесплатно. Оплата — за минуты обработки, без скрытых списаний.
+                  Оплата в кредитах — платите только за то, что используете.
+                  Бесплатные 300 кредитов при регистрации.
                 </p>
               </div>
-              <div className="pricing">
 
-                <div className="price-card">
-                  <div className="price-name">Старт</div>
-                  <div className="price-val">0 ₽<span>/мес</span></div>
-                  <div className="price-desc">Для знакомства с сервисом</div>
-                  <ul className="price-list">
-                    <li>5 обработок в месяц</li>
-                    <li>Апскейл до 1080p</li>
-                    <li>Интерполяция до 60 fps</li>
-                    <li>Стандартная очередь</li>
-                  </ul>
-                  <button className="btn btn-ghost btn-block" onClick={() => onAuthClick('register')}>
-                    Выбрать
-                  </button>
+              {/* Личные тарифы */}
+              <div style={{ marginBottom: 48 }}>
+                <h3 style={{ fontFamily: 'var(--marker)', fontWeight: 400, letterSpacing: 0, fontSize: 'clamp(22px, 2.8vw, 30px)', lineHeight: 1.18, marginBottom: 24 }}>
+                  Для частных пользователей
+                </h3>
+                <p className="sub" style={{ marginTop: 0, marginBottom: 28, maxWidth: 520 }}>
+                  Разовые пакеты кредитов. Без подписки и автоматических списаний.
+                </p>
+
+                <div className="pricing">
+                  <div className="price-card">
+                    <div className="price-name">Free</div>
+                    <div className="price-val">0 ₽</div>
+                    <div className="price-desc">Пробный доступ при регистрации</div>
+                    <ul className="price-list">
+                      <li>300 кредитов</li>
+                      <li>Апскейл до 1080p</li>
+                      <li>Интерполяция до 60 fps</li>
+                      <li>Стандартная очередь</li>
+                    </ul>
+                    <button className="btn btn-ghost btn-block" onClick={() => onAuthClick('register')}>
+                      Попробовать
+                    </button>
+                  </div>
+
+                  <div className="price-card">
+                    <div className="price-name">Start</div>
+                    <div className="price-val">290 ₽</div>
+                    <div className="price-desc">Разовая покупка пакета</div>
+                    <ul className="price-list">
+                      <li>1 350 кредитов</li>
+                      <li>Апскейл до 4K</li>
+                      <li>Интерполяция до 120 fps</li>
+                      <li>Приоритетная очередь</li>
+                    </ul>
+                    <button className="btn btn-ghost btn-block" onClick={() => onAuthClick('register')}>
+                      Выбрать
+                    </button>
+                  </div>
+
+                  <div className="price-card featured">
+                    <div className="price-name">Creator</div>
+                    <div className="price-val">590 ₽</div>
+                    <div className="price-desc">Разовая покупка пакета</div>
+                    <ul className="price-list">
+                      <li>2 750 кредитов</li>
+                      <li>Апскейл до 4K</li>
+                      <li>Интерполяция до 120 fps</li>
+                      <li>Цветокоррекция</li>
+                      <li>Приоритетная очередь</li>
+                    </ul>
+                    <button className="btn btn-primary btn-block" onClick={() => onAuthClick('register')}>
+                      Выбрать
+                    </button>
+                  </div>
+
+                  <div className="price-card">
+                    <div className="price-name">Pro</div>
+                    <div className="price-val">1 490 ₽</div>
+                    <div className="price-desc">Разовая покупка пакета</div>
+                    <ul className="price-list">
+                      <li>7 000 кредитов</li>
+                      <li>Апскейл до 8K</li>
+                      <li>Интерполяция до 120 fps</li>
+                      <li>Цветокоррекция</li>
+                      <li>Максимальный приоритет</li>
+                    </ul>
+                    <button className="btn btn-ghost btn-block" onClick={() => onAuthClick('register')}>
+                      Выбрать
+                    </button>
+                  </div>
                 </div>
-
-                <div className="price-card featured">
-                  <div className="price-name">Про</div>
-                  <div className="price-val">990 ₽<span>/мес</span></div>
-                  <div className="price-desc">Для регулярной работы</div>
-                  <ul className="price-list">
-                    <li>100 обработок в месяц</li>
-                    <li>Апскейл до 4K</li>
-                    <li>Интерполяция до 120 fps</li>
-                    <li>Приоритетная очередь</li>
-                  </ul>
-                  <button className="btn btn-primary btn-block" onClick={() => onAuthClick('register')}>
-                    Выбрать
-                  </button>
-                </div>
-
-                <div className="price-card">
-                  <div className="price-name">Студия</div>
-                  <div className="price-val">2 990 ₽<span>/мес</span></div>
-                  <div className="price-desc">Для команд и продакшена</div>
-                  <ul className="price-list">
-                    <li>Без ограничений по количеству</li>
-                    <li>Апскейл до 8K</li>
-                    <li>Пакетная склейка</li>
-                    <li>Выделенные GPU-ноды</li>
-                    <li>API и вебхуки</li>
-                  </ul>
-                  <button className="btn btn-ghost btn-block" onClick={() => onAuthClick('register')}>
-                    Выбрать
-                  </button>
-                </div>
-
               </div>
+
+              {/* Корпоративные тарифы */}
+              <div>
+                <h3 style={{ fontFamily: 'var(--marker)', fontWeight: 400, letterSpacing: 0, fontSize: 'clamp(22px, 2.8vw, 30px)', lineHeight: 1.18, marginBottom: 24 }}>
+                  Для компаний и команд
+                </h3>
+                <p className="sub" style={{ marginTop: 0, marginBottom: 28, maxWidth: 520 }}>
+                  Ежемесячный общий баланс организации. Для команд от 2 человек.
+                </p>
+
+                <div className="pricing">
+                  <div className="price-card">
+                    <div className="price-name">Business Start</div>
+                    <div className="price-val">14 900 ₽<span>/мес</span></div>
+                    <div className="price-desc">Общий баланс организации</div>
+                    <ul className="price-list">
+                      <li>20 000 кредитов в месяц</li>
+                      <li>До 5 пользователей</li>
+                      <li>Апскейл до 4K</li>
+                      <li>Приоритетная очередь</li>
+                    </ul>
+                    <button className="btn btn-ghost btn-block" onClick={() => onAuthClick('register')}>
+                      Выбрать
+                    </button>
+                  </div>
+
+                  <div className="price-card featured">
+                    <div className="price-name">Business Pro</div>
+                    <div className="price-val">29 900 ₽<span>/мес</span></div>
+                    <div className="price-desc">Общий баланс организации</div>
+                    <ul className="price-list">
+                      <li>40 000 кредитов в месяц</li>
+                      <li>До 15 пользователей</li>
+                      <li>Апскейл до 8K</li>
+                      <li>Цветокоррекция</li>
+                      <li>Выделенные GPU-ноды</li>
+                    </ul>
+                    <button className="btn btn-primary btn-block" onClick={() => onAuthClick('register')}>
+                      Выбрать
+                    </button>
+                  </div>
+
+                  <div className="price-card">
+                    <div className="price-name">Enterprise</div>
+                    <div className="price-val">от 49 900 ₽<span>/мес</span></div>
+                    <div className="price-desc">Индивидуальные условия и объём</div>
+                    <ul className="price-list">
+                      <li>От 70 000 кредитов в месяц</li>
+                      <li>Неограниченное число пользователей</li>
+                      <li>Все модули обработки</li>
+                      <li>API и вебхуки</li>
+                      <li>Персональный менеджер</li>
+                    </ul>
+                    <button className="btn btn-ghost btn-block" onClick={() => onAuthClick('register')}>
+                      Выбрать
+                    </button>
+                  </div>
+                </div>
+              </div>
+
             </div>
           </section>
 
