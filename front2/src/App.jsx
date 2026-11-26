@@ -99,9 +99,6 @@ export default function App() {
       <div className="app-main">
         <header className="topbar">
           <h1>{viewTitles[view] || 'Обзор'}</h1>
-          <div className="topbar-actions">
-            <button className="btn btn-ghost btn-sm">Документация</button>
-          </div>
         </header>
         <div className="content">
           {renderView()}
