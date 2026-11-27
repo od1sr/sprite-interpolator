@@ -172,7 +172,7 @@ export function resolveApiUrl(path: string): string {
   try {
     // BASE_URL can be absolute (http://host/api/v1) or relative (/api/v1
     // behind a proxy). Resolving it against the page origin accepts both.
-    const base = new URL(BASE_URL, window.location.origin);
+    const base = new URL(`${BASE_URL.replace(/\/+$/, '')}/`, window.location.origin);
     return new URL(path, base).toString();
   } catch {
     // A malformed URL must never crash the React tree while it renders.
