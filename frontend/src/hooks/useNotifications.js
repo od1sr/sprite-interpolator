@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const STORAGE_KEY = 'zarya.notifications';
-const VISIBLE_MS = 8000;
+export const NOTIFICATION_VISIBLE_MS = 8000;
 const EXIT_MS = 400;
 const MAX_NOTIFICATIONS = 30;
 const MAX_TOASTS = 4;
@@ -10,7 +10,9 @@ function loadNotifications() {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     const items = raw ? JSON.parse(raw) : [];
-    return Array.isArray(items) ? items.slice(0, MAX_NOTIFICATIONS) : [];
+    return Array.isArray(items)
+      ? items.slice(0, MAX_NOTIFICATIONS).map((item) => ({ ...item, read: Boolean(item.read) }))
+      : [];
   } catch {
     return [];
   }
@@ -60,6 +62,12 @@ export function useNotifications() {
     finishToast(id);
   }, [clearTimers, finishToast]);
 
+  const markAllRead = useCallback(() => {
+    setNotifications((current) => current.map((item) => (
+      item.read ? item : { ...item, read: true }
+    )));
+  }, []);
+
   const notify = useCallback(({ title, message, kind = 'info' }) => {
     const id = typeof crypto !== 'undefined' && crypto.randomUUID
       ? crypto.randomUUID()
@@ -69,6 +77,7 @@ export function useNotifications() {
       title,
       message,
       kind,
+      read: false,
       created_at: new Date().toISOString(),
     };
     setNotifications((current) => [item, ...current].slice(0, MAX_NOTIFICATIONS));
@@ -79,10 +88,18 @@ export function useNotifications() {
       // The CSS animation normally calls finishToast; this covers reduced
       // motion and toasts already pushed out of the visible stack.
       storeTimer(id, window.setTimeout(() => finishToast(id), EXIT_MS));
-    }, VISIBLE_MS));
+    }, NOTIFICATION_VISIBLE_MS));
 
     return id;
   }, [finishToast, storeTimer]);
 
-  return { notifications, toastIds, leavingIds, notify, dismiss, finishToast };
+  return {
+    notifications,
+    toastIds,
+    leavingIds,
+    notify,
+    dismiss,
+    markAllRead,
+    finishToast,
+  };
 }

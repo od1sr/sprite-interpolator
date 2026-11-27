@@ -331,7 +331,7 @@ function TaskRow({
 
 export default function App() {
   const { user, isLoading, login, register, logout, buyPlan, refreshUser, getPlan, updateProfile } = useAuth();
-  const { notifications, toastIds, leavingIds, notify, dismiss, finishToast } = useNotifications();
+  const { notifications, toastIds, leavingIds, notify, dismiss, markAllRead, finishToast } = useNotifications();
   const [notifyDone, setNotifyDone] = useState(() => {
     try {
       return window.localStorage.getItem('zarya.notify.done') !== '0';
@@ -966,7 +966,7 @@ export default function App() {
             <h1>{VIEW_TITLES[view]}</h1>
           </div>
           <div className="topbar-actions">
-            <NotificationBell notifications={notifications} onDismiss={dismiss} />
+            <NotificationBell notifications={notifications} onDismiss={dismiss} onReadAll={markAllRead} />
             <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <div className="token-balance" title="Доступные токены">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

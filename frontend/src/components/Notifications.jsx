@@ -1,4 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { NOTIFICATION_VISIBLE_MS } from '../hooks/useNotifications';
+
+const KIND_LABELS = {
+  success: 'Готово',
+  danger: 'Внимание',
+  info: 'Сообщение',
+};
 
 function BellIcon() {
   return (
@@ -17,34 +24,101 @@ function CloseIcon() {
   );
 }
 
-function NotificationCard({ item, onDismiss, className = '', onAnimationEnd }) {
+function KindIcon({ kind }) {
+  if (kind === 'success') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M5 12.5l4.5 4.5L19 7" />
+      </svg>
+    );
+  }
+  if (kind === 'danger') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+        <path d="M12 7v7M12 17.5v.5" />
+      </svg>
+    );
+  }
   return (
-    <div
-      className={`notification-card notification-card--${item.kind}${className ? ` ${className}` : ''}`}
-      onAnimationEnd={onAnimationEnd}
-    >
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <path d="M12 11v6M12 7.5v.5" />
+    </svg>
+  );
+}
+
+function formatTime(value) {
+  try {
+    return new Date(value).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+}
+
+function NotificationCard({ item, onDismiss }) {
+  return (
+    <div className={`notification-card notification-card--${item.kind}${item.read ? '' : ' is-unread'}`}>
+      <span className="notification-card-icon"><KindIcon kind={item.kind} /></span>
       <div className="notification-card-body">
         <b>{item.title}</b>
         <span>{item.message}</span>
       </div>
-      {onDismiss && (
-        <button
-          type="button"
-          className="notification-close"
-          aria-label="Удалить уведомление"
-          title="Удалить уведомление"
-          onClick={() => onDismiss(item.id)}
-        >
-          <CloseIcon />
-        </button>
-      )}
+      <div className="notification-card-side">
+        <time>{formatTime(item.created_at)}</time>
+        {onDismiss && (
+          <button
+            type="button"
+            className="notification-close"
+            aria-label="Удалить уведомление"
+            title="Удалить уведомление"
+            onClick={() => onDismiss(item.id)}
+          >
+            <CloseIcon />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
-export function NotificationBell({ notifications, onDismiss }) {
+function ToastCard({ item, leaving, onFinish, onDismiss }) {
+  return (
+    <div
+      className={`notification-card notification-card--${item.kind} notification-toast${leaving ? ' is-leaving' : ''}`}
+      onAnimationEnd={(event) => {
+        if (leaving && event.animationName === 'toast-out') onFinish(item.id);
+      }}
+    >
+      <div className="notification-toast-head">
+        <span className="notification-kind">
+          <KindIcon kind={item.kind} />
+          {KIND_LABELS[item.kind] || KIND_LABELS.info}
+        </span>
+        <time>{formatTime(item.created_at)}</time>
+        <button
+          type="button"
+          className="notification-close"
+          aria-label="Закрыть уведомление"
+          title="Закрыть уведомление"
+          onClick={() => onDismiss(item.id)}
+        >
+          <CloseIcon />
+        </button>
+      </div>
+      <div className="notification-card-body">
+        <b>{item.title}</b>
+        <span>{item.message}</span>
+      </div>
+      <div className="notification-progress" aria-hidden="true">
+        <i style={{ animationDuration: `${NOTIFICATION_VISIBLE_MS}ms` }} />
+      </div>
+    </div>
+  );
+}
+
+export function NotificationBell({ notifications, onDismiss, onReadAll }) {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef(null);
+  const unreadCount = notifications.filter((item) => !item.read).length;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -62,18 +136,23 @@ export function NotificationBell({ notifications, onDismiss }) {
     };
   }, [open]);
 
+  const handleClick = () => {
+    if (!open) onReadAll();
+    setOpen((current) => !current);
+  };
+
   return (
     <div className="notification-bell" ref={wrapperRef}>
       <button
         type="button"
         className="icon-btn notification-bell-btn"
-        aria-label={notifications.length ? `Уведомления: ${notifications.length}` : 'Уведомления'}
+        aria-label={unreadCount ? `Непрочитанные уведомления: ${unreadCount}` : 'Уведомления'}
         aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
+        onClick={handleClick}
       >
         <BellIcon />
-        {notifications.length > 0 && (
-          <span className="notification-count">{notifications.length > 99 ? '99+' : notifications.length}</span>
+        {unreadCount > 0 && (
+          <span className="notification-count">{unreadCount > 99 ? '99+' : unreadCount}</span>
         )}
       </button>
 
@@ -81,11 +160,11 @@ export function NotificationBell({ notifications, onDismiss }) {
         <div className="notification-popover" role="dialog" aria-label="Уведомления">
           <div className="notification-popover-head">
             <b>Уведомления</b>
-            <span>{notifications.length}</span>
+            <span>{notifications.length ? `${notifications.length} в списке` : 'пусто'}</span>
           </div>
           <div className="notification-popover-list">
             {notifications.length ? notifications.map((item) => (
-              <NotificationCard key={item.id} item={item} onDismiss={onDismiss} className="is-compact" />
+              <NotificationCard key={item.id} item={item} onDismiss={onDismiss} />
             )) : <p className="notification-empty">Уведомлений пока нет</p>}
           </div>
         </div>
@@ -102,14 +181,12 @@ export function ToastStack({ notifications, toastIds, leavingIds, onFinish, onDi
         const item = notifications.find((notification) => notification.id === id);
         if (!item) return null;
         return (
-          <NotificationCard
+          <ToastCard
             key={id}
             item={item}
-            className={`notification-toast${leavingIds.has(id) ? ' is-leaving' : ''}`}
+            leaving={leavingIds.has(id)}
+            onFinish={onFinish}
             onDismiss={onDismiss}
-            onAnimationEnd={(event) => {
-              if (leavingIds.has(id) && event.animationName === 'toast-out') onFinish(id);
-            }}
           />
         );
       })}
