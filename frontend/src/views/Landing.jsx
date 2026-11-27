@@ -1,4 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import originalVideoUrl from '../../original.MP4?url';
+import resultVideoUrl from '../../result.mp4?url';
+import backOneVideoUrl from '../../result_back_1.mp4?url';
+import backTwoVideoUrl from '../../result_back_2.mp4?url';
 
 const FEATURES = [
   {
@@ -147,6 +151,94 @@ function LedgerGroup({ title, description, plans, onAuthClick }) {
 
 export default function Landing({ onAuthClick }) {
   const rootRef = useRef(null);
+  const stageRef = useRef(null);
+  const beforeRef = useRef(null);
+  const afterRef = useRef(null);
+  const backOneRef = useRef(null);
+  const backTwoRef = useRef(null);
+  const [split, setSplit] = useState(50);
+  const [dragging, setDragging] = useState(false);
+  const [playing, setPlaying] = useState(false);
+
+  useEffect(() => {
+    const videos = [beforeRef.current, afterRef.current, backTwoRef.current, backOneRef.current].filter(Boolean);
+    if (!videos.length) return;
+    Promise.allSettled(videos.map((video) => video.play())).then((results) => {
+      setPlaying(results.every((result) => result.status === 'fulfilled'));
+    });
+  }, []);
+
+  const syncAfter = () => {
+    const before = beforeRef.current;
+    const after = afterRef.current;
+    if (!before || !after) return;
+    if (Math.abs(before.currentTime - after.currentTime) > 0.25) {
+      after.currentTime = before.currentTime;
+    }
+  };
+
+  const moveDivider = (clientX) => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const rect = stage.getBoundingClientRect();
+    const next = ((clientX - rect.left) / rect.width) * 100;
+    setSplit(Math.min(100, Math.max(0, next)));
+  };
+
+  const handlePointerDown = (event) => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    stage.setPointerCapture(event.pointerId);
+    setDragging(true);
+    moveDivider(event.clientX);
+  };
+
+  const handlePointerMove = (event) => {
+    if (dragging) moveDivider(event.clientX);
+  };
+
+  const stopDragging = (event) => {
+    if (!dragging) return;
+    setDragging(false);
+    const stage = stageRef.current;
+    if (stage?.hasPointerCapture(event.pointerId)) stage.releasePointerCapture(event.pointerId);
+  };
+
+  const handleKeyDown = (event) => {
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      setSplit((value) => Math.max(0, value - 2));
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      setSplit((value) => Math.min(100, value + 2));
+    }
+  };
+
+  const allVideos = () => [beforeRef.current, afterRef.current, backTwoRef.current, backOneRef.current].filter(Boolean);
+
+  const togglePlayback = () => {
+    const videos = allVideos();
+    if (!videos.length) return;
+    if (playing) {
+      videos.forEach((video) => video.pause());
+      setPlaying(false);
+      return;
+    }
+    Promise.allSettled(videos.map((video) => video.play())).then((results) => {
+      setPlaying(results.every((result) => result.status === 'fulfilled'));
+    });
+  };
+
+  const restartPlayback = () => {
+    const videos = allVideos();
+    if (!videos.length) return;
+    videos.forEach((video) => {
+      video.currentTime = 0;
+    });
+    Promise.allSettled(videos.map((video) => video.play())).then((results) => {
+      setPlaying(results.every((result) => result.status === 'fulfilled'));
+    });
+  };
 
   useEffect(() => {
     const root = rootRef.current;
@@ -203,11 +295,7 @@ export default function Landing({ onAuthClick }) {
         <section className="hero">
           <div className="wrap hero-grid">
             <div className="hero-copy">
-              <div className="hero-index">
-                <span className="pill pill-accent"><span className="dot" /> VIDEO ENGINE / 01</span>
-                <span className="hero-timecode">24 → 120 FPS · 4K / 8K</span>
-              </div>
-              <h1>Больше кадров.<br /><em>Меньше потерь.</em></h1>
+              <h1><span className="hero-word--big">Больше</span> кадров.<br /><em><span className="hero-word--small">Меньше</span> потерь.</em></h1>
               <p className="lede">
                 Интерполяция, апскейл и цвет — в одном конвейере. Загрузите файл,
                 соберите цепочку и заберите готовый результат.
@@ -227,20 +315,112 @@ export default function Landing({ onAuthClick }) {
               </div>
             </div>
 
-            <aside className="hero-console" aria-label="Схема обработки">
-              <div className="console-bar">
-                <span className="console-dot" />
-                <span>ACTIVE PIPELINE</span>
-                <span>TC 00:00:00:00</span>
+            <aside className="compare" aria-label="Сравнение видео до и после обработки">
+              <div className="compare-backdrops" aria-hidden="true">
+                <video
+                  ref={backTwoRef}
+                  className="compare-back compare-back--top"
+                  src={backTwoVideoUrl}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                />
+                <video
+                  ref={backOneRef}
+                  className="compare-back compare-back--bottom"
+                  src={backOneVideoUrl}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                />
               </div>
-              <ol className="console-track">
-                <li><b>01</b><span>INTERPOLATE</span><i>×2 → ×16</i></li>
-                <li><b>02</b><span>UPSCALE</span><i>2× / 4×</i></li>
-                <li><b>03</b><span>COLOR CORRECT</span><i>LUT + SHARP</i></li>
-              </ol>
-              <div className="console-foot">
-                <div className="bar active"><i style={{ width: '68%' }} /></div>
-                <span className="mono">68%</span>
+
+              <div
+                className={`compare-stage${dragging ? ' dragging' : ''}`}
+                ref={stageRef}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={stopDragging}
+                onPointerCancel={stopDragging}
+              >
+                <video
+                  ref={beforeRef}
+                  className="compare-video"
+                  src={originalVideoUrl}
+                  poster="/compare-before.jpg"
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                  onTimeUpdate={syncAfter}
+                />
+                <video
+                  ref={afterRef}
+                  className="compare-video compare-video--after"
+                  style={{ clipPath: `inset(0 0 0 ${split}%)` }}
+                  src={resultVideoUrl}
+                  poster="/compare-after.jpg"
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                />
+                <div
+                  className="compare-divider"
+                  style={{ left: `${split}%` }}
+                  role="slider"
+                  tabIndex={0}
+                  aria-label="Положение разделения видео"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(split)}
+                  onKeyDown={handleKeyDown}
+                >
+                  <span className="compare-handle" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m10 7-4 5 4 5" />
+                      <path d="m14 7 4 5-4 5" />
+                    </svg>
+                  </span>
+                </div>
+
+                <div
+                  className="compare-controls"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
+                >
+                  <button
+                    className="compare-ctrl compare-restart"
+                    type="button"
+                    onClick={restartPlayback}
+                    aria-label="Запустить сначала"
+                    title="Запустить сначала"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M3 12a9 9 0 1 0 3-6.7" />
+                      <path d="M3 4v5h5" />
+                    </svg>
+                  </button>
+                  <button
+                    className="compare-ctrl compare-pause"
+                    type="button"
+                    onClick={togglePlayback}
+                    aria-label={playing ? 'Пауза' : 'Воспроизвести'}
+                    title={playing ? 'Пауза' : 'Воспроизвести'}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      {playing
+                        ? <><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></>
+                        : <path d="M8 5.5v13l11-6.5z" />}
+                    </svg>
+                  </button>
+                </div>
               </div>
             </aside>
           </div>
