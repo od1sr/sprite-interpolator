@@ -4,8 +4,10 @@
    ========================================================= */
 
 @font-face{
-  font-family:'Ziyad Askar';
-  src:url('/fonts/ziyad-askar-regular.ttf') format('truetype');
+  font-family:'Pusia';
+  src:url('/fonts/pusia-regular.woff2') format('woff2'),
+      url('/fonts/pusia-regular.ttf') format('truetype'),
+      url('/fonts/pusia-regular.otf') format('opentype');
   font-weight:400;
   font-style:normal;
   font-display:swap;
@@ -30,7 +32,8 @@
   --err:#D64545;
   --r:16px;
   --r-sm:10px;
-  --marker:'Permanent Marker','Caveat',cursive;
+  --marker:'Pusia','Permanent Marker','Caveat',cursive;
+  --brand:'Permanent Marker','Caveat',cursive;
   --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
   --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono',monospace;
   --shadow-sm:0 1px 2px rgba(15,23,42,.04);
@@ -54,7 +57,7 @@ body{
   text-rendering:optimizeLegibility;
 }
 ::selection{background:var(--accent);color:#FFFFFF}
-h1,h2,h3,h4{margin:0;font-weight:650;letter-spacing:-.035em;line-height:1.1}
+h1,h2,h3,h4,h5,h6{margin:0;font-family:'Pusia',var(--marker);font-weight:400;letter-spacing:-.035em;line-height:1.1}
 p{margin:0}
 a{color:inherit;text-decoration:none;cursor:pointer}
 button{font-family:inherit;cursor:pointer}
@@ -112,7 +115,7 @@ ul,ol{margin:0;padding:0;list-style:none}
 }
 .brand{
   display:flex;align-items:center;gap:10px;
-  font-family:var(--marker);font-weight:400;font-size:20px;letter-spacing:.01em;line-height:1;
+  font-family:var(--brand);font-weight:400;font-size:20px;letter-spacing:.01em;line-height:1;
 }
 .brand-mark{width:32px;height:32px;flex:0 0 auto;background:url('/logo.png') center / contain no-repeat}
 .nav-links{display:flex;gap:30px;font-size:13.5px;color:var(--muted)}
@@ -147,7 +150,7 @@ ul,ol{margin:0;padding:0;list-style:none}
 .hero-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(420px,1.05fr);gap:48px;align-items:center}
 .hero-copy{position:relative;padding:12px 0 10px}
 .hero h1{
-  font-family:'Ziyad Askar',var(--marker);font-weight:400;letter-spacing:0;
+  font-family:'Pusia',var(--marker);font-weight:400;letter-spacing:0;
   font-size:clamp(40px,5.4vw,68px);line-height:1.04;max-width:840px;
 }
 .hero h1 em{font-style:normal;color:var(--accent)}
@@ -560,7 +563,7 @@ ul,ol{margin:0;padding:0;list-style:none}
   background:rgba(245,246,248,.86);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
 }
 .topbar-id{display:flex;align-items:center;min-width:0}
-.topbar h1{font-size:16px;font-weight:600;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar h1{font-size:16px;font-weight:400;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .topbar-actions{display:flex;align-items:center;gap:16px}
 .topbar-actions .btn svg{width:16px;height:16px;opacity:.85}
 .content{padding:28px;width:100%;max-width:1240px;margin:0 auto}
@@ -591,7 +594,7 @@ ul,ol{margin:0;padding:0;list-style:none}
   font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;
   color:var(--accent);display:block;margin-bottom:9px;
 }
-.welcome-title{font-size:clamp(24px,3.2vw,34px);letter-spacing:-.035em;font-weight:650}
+.welcome-title{font-size:clamp(24px,3.2vw,34px);letter-spacing:-.035em;font-weight:400}
 .welcome-sub{color:var(--muted);font-size:14px;margin-top:7px;max-width:560px}
 .workbench-intro,.projects-head{margin-bottom:16px}
 .flowline{
@@ -667,7 +670,7 @@ ul,ol{margin:0;padding:0;list-style:none}
   background:repeating-linear-gradient(to bottom,var(--line-2) 0 5px,transparent 5px 13px);opacity:.7;
 }
 .panel-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
-.panel-head h3{font-size:15px;font-weight:650;letter-spacing:-.02em}
+.panel-head h3{font-size:15px;font-weight:400;letter-spacing:-.02em}
 .step-head{align-items:flex-end;padding-bottom:16px;margin-bottom:20px;border-bottom:1px solid var(--line)}
 .step-heading{display:flex;align-items:center;gap:12px;min-width:0}
 .step-number{
@@ -675,7 +678,7 @@ ul,ol{margin:0;padding:0;list-style:none}
   border:1px solid var(--line-2);border-radius:9px;background:var(--surface-2);color:var(--muted);
   font-family:var(--mono);font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:.04em;
 }
-.step-head h3{font-size:16px;font-weight:650;letter-spacing:-.02em;line-height:1.15}
+.step-head h3{font-size:16px;font-weight:400;letter-spacing:-.02em;line-height:1.15}
 
 /* =========================================================
    DROPZONE / FILE META
