@@ -168,5 +168,6 @@ export function getVideoExport(exportId: string): Promise<ExportJob> {
 }
 
 export function resolveApiUrl(path: string): string {
-  return new URL(path, `${BASE_URL.replace(/\/+$/, '')}/`).toString();
+  const apiBase = new URL(`${BASE_URL.replace(/\/+$/, '')}/`, window.location.origin);
+  return new URL(path, apiBase).toString();
 }

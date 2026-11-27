@@ -5,9 +5,7 @@
 
 @font-face{
   font-family:'Pusia';
-  src:url('/fonts/pusia-regular.woff2') format('woff2'),
-      url('/fonts/pusia-regular.ttf') format('truetype'),
-      url('/fonts/pusia-regular.otf') format('opentype');
+  src:url('/fonts/pusia-regular.otf') format('opentype');
   font-weight:400;
   font-style:normal;
   font-display:swap;
