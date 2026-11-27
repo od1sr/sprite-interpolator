@@ -590,6 +590,64 @@ ul,ol{margin:0;padding:0;list-style:none}
 .topbar h1{font-size:16px;font-weight:400;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .topbar-actions{display:flex;align-items:center;gap:16px}
 .topbar-actions .btn svg{width:16px;height:16px;opacity:.85}
+
+/* Notifications: bell list + auto-hiding toasts. */
+.notification-bell{position:relative;display:flex;align-items:center}
+.notification-bell-btn{width:34px;height:34px;border-color:var(--line-2);background:var(--surface)}
+.notification-bell-btn svg{width:18px;height:18px}
+.notification-count{
+  position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 4px;
+  display:grid;place-items:center;border-radius:999px;background:var(--accent);color:#FFFFFF;
+  font-family:var(--mono);font-size:10px;font-weight:700;line-height:1;
+  box-shadow:0 0 0 2px var(--surface);
+}
+.notification-popover{
+  position:absolute;top:calc(100% + 12px);right:0;width:340px;max-height:420px;
+  display:flex;flex-direction:column;z-index:60;overflow:hidden;
+  border:1px solid var(--line);border-radius:var(--r-sm);
+  background:var(--surface);box-shadow:var(--shadow-md);
+}
+.notification-popover-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:13px 15px;border-bottom:1px solid var(--line);
+}
+.notification-popover-head b{font-size:14px;font-weight:600}
+.notification-popover-head span{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.notification-popover-list{overflow-y:auto;padding:8px}
+.notification-empty{margin:0;padding:22px 10px;text-align:center;font-size:13px;color:var(--muted)}
+.notification-card{
+  display:flex;align-items:flex-start;gap:10px;width:100%;
+  padding:12px 13px;border:1px solid var(--line);border-left:3px solid var(--accent);
+  border-radius:var(--r-sm);background:var(--surface);box-shadow:var(--shadow-sm);
+}
+.notification-card--success{border-left-color:var(--ok)}
+.notification-card--danger{border-left-color:var(--err)}
+.notification-card-body{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px}
+.notification-card-body b{font-size:13.5px;font-weight:600;color:var(--text)}
+.notification-card-body span{font-size:12.5px;line-height:1.45;color:var(--muted)}
+.notification-close{
+  flex:0 0 auto;width:24px;height:24px;display:grid;place-items:center;
+  border:0;border-radius:6px;background:transparent;color:var(--faint);cursor:pointer;transition:.15s ease;
+}
+.notification-close:hover{background:var(--surface-2);color:var(--text)}
+.notification-close svg{width:14px;height:14px}
+.notification-card.is-compact{
+  padding:10px;border:0;border-bottom:1px solid var(--line);border-radius:0;
+  box-shadow:none;background:transparent;
+}
+.notification-card.is-compact:last-child{border-bottom:0}
+.toast-stack{
+  position:fixed;top:78px;right:24px;z-index:200;
+  display:flex;flex-direction:column;gap:10px;width:min(360px,calc(100vw - 32px));
+  pointer-events:none;
+}
+.notification-toast{pointer-events:auto;animation:toast-in .34s cubic-bezier(.2,.8,.2,1) both}
+.notification-toast.is-leaving{animation:toast-out .34s ease-in both}
+@keyframes toast-in{from{transform:translateX(calc(100% + 32px))}to{transform:translateX(0)}}
+@keyframes toast-out{from{transform:translateX(0)}to{transform:translateX(calc(100% + 32px))}}
+@media (prefers-reduced-motion:reduce){
+  .notification-toast,.notification-toast.is-leaving{animation-duration:.01ms}
+}
 .theme-toggle{
   position:relative;flex:0 0 auto;width:54px;height:28px;padding:0;
   border:1px solid var(--line-2);border-radius:999px;background:var(--surface-2);
@@ -1117,16 +1175,8 @@ td{padding:13px 12px;border-top:1px solid var(--line);vertical-align:middle;whit
 tbody tr{transition:background .14s}
 tbody tr:hover{background:rgba(15,23,42,.025)}
 
-/* Toast / banners */
+/* Banners */
 .error-banner{margin-bottom:18px;padding:12px 16px;border:1px solid rgba(214,69,69,.25);border-radius:10px;background:rgba(214,69,69,.06);color:var(--err);font-size:14px}
-.toast-wrap{position:fixed;bottom:24px;right:24px;z-index:200;display:flex;flex-direction:column;gap:10px;pointer-events:none;max-width:calc(100vw - 48px)}
-.toast{
-  background:var(--text);color:#fff;padding:12px 18px;border-radius:10px;font-size:13.5px;line-height:1.4;
-  box-shadow:0 12px 30px rgba(15,23,42,.22);display:flex;align-items:center;gap:10px;pointer-events:auto;animation:toastIn .25s ease;
-}
-.toast .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:0 0 auto}
-.toast.ok .dot{background:#4ADE80}
-@keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
 /* =========================================================
    SCROLL REVEAL (no library)
@@ -1178,7 +1228,6 @@ tbody tr:hover{background:rgba(15,23,42,.025)}
 [data-theme='dark'] .field input::placeholder{color:var(--faint)}
 [data-theme='dark'] .preview-toggle button.active{background:var(--surface);color:var(--text)}
 [data-theme='dark'] .switch span{background:var(--surface-3)}
-[data-theme='dark'] .toast{background:var(--surface-3);color:var(--text);box-shadow:0 12px 30px rgba(0,0,0,.45)}
 
 /* =========================================================
    RESPONSIVE
@@ -1232,6 +1281,8 @@ tbody tr:hover{background:rgba(15,23,42,.025)}
   .nav-actions .btn-ghost{display:none}
   .topbar-actions{gap:10px}
   .token-balance span{display:none}
+  .toast-stack{top:70px;right:16px}
+  .notification-popover{width:min(340px,calc(100vw - 24px));right:-8px}
   .hero h1{font-size:clamp(38px,10vw,58px)}
   .hero-meta div{padding-right:18px;margin-right:18px;font-size:12px}
   .reel-row{grid-template-columns:44px minmax(0,1fr);gap:14px;padding:20px 4px}

@@ -24,8 +24,10 @@ import type {
   Video,
 } from './types/api';
 import { useAuth } from './hooks/useAuth';
+import { useNotifications } from './hooks/useNotifications';
 import { formatDuration, getStepTiming } from './utils/processingTime';
 import Sidebar from './components/Sidebar';
+import { NotificationBell, ToastStack } from './components/Notifications';
 import ThemeToggle from './components/ThemeToggle';
 import Auth from './views/Auth';
 import Dashboard from './views/Dashboard';
@@ -329,6 +331,15 @@ function TaskRow({
 
 export default function App() {
   const { user, isLoading, login, register, logout, buyPlan, refreshUser, getPlan, updateProfile } = useAuth();
+  const { notifications, toastIds, leavingIds, notify, dismiss, finishToast } = useNotifications();
+  const [notifyDone, setNotifyDone] = useState(() => {
+    try {
+      return window.localStorage.getItem('zarya.notify.done') !== '0';
+    } catch {
+      return true;
+    }
+  });
+  const notifiedJobs = useRef(new Set<string>());
   const currentUserId = user ? (user as User).id : null;
   const tokenBalance = user ? (user as User).token_balance : 0;
   const [view, setView] = useState<View>('landing');
@@ -363,6 +374,7 @@ export default function App() {
 
   const resetWorkspace = () => {
     uploadSequence.current += 1;
+    notifiedJobs.current.clear();
     setFile(null);
     setVideo(null);
     setJob(null);
@@ -386,9 +398,22 @@ export default function App() {
   const handleDeleteAllData = async () => {
     const result = await deleteAllUserData();
     resetWorkspace();
-    await refreshUser();
+    await refreshUser().catch(() => undefined);
+    notify({
+      kind: 'success',
+      title: 'Данные удалены',
+      message: `Видео: ${result.videos}, задачи: ${result.jobs}, результаты: ${result.results}, экспорты: ${result.exports}.`,
+    });
     return result;
   };
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('zarya.notify.done', notifyDone ? '1' : '0');
+    } catch {
+      // The toggle still works for this session if storage is unavailable.
+    }
+  }, [notifyDone]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -630,6 +655,18 @@ export default function App() {
       });
   }, [job?.id, job?.status]);
 
+  useEffect(() => {
+    if (job?.status !== 'completed') return;
+    if (notifiedJobs.current.has(job.id)) return;
+    notifiedJobs.current.add(job.id);
+    if (!notifyDone) return;
+    notify({
+      kind: 'success',
+      title: 'Проект готов',
+      message: 'Обработка завершена. Результат доступен в проектах.',
+    });
+  }, [job?.id, job?.status, notifyDone, notify]);
+
   // Load the workspace as soon as the session is known, so the dashboard
   // counters are correct on the first render after login or page reload.
   useEffect(() => {
@@ -862,7 +899,15 @@ export default function App() {
       case 'projects':
         return renderProjects();
       case 'settings':
-        return <Settings user={user} onUpdateProfile={updateProfile} onDeleteData={handleDeleteAllData} />;
+        return (
+          <Settings
+            user={user}
+            onUpdateProfile={updateProfile}
+            onDeleteData={handleDeleteAllData}
+            notifyDone={notifyDone}
+            onNotifyDoneChange={setNotifyDone}
+          />
+        );
       default:
         return renderDashboard();
     }
@@ -921,6 +966,7 @@ export default function App() {
             <h1>{VIEW_TITLES[view]}</h1>
           </div>
           <div className="topbar-actions">
+            <NotificationBell notifications={notifications} onDismiss={dismiss} />
             <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <div className="token-balance" title="Доступные токены">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -946,6 +992,13 @@ export default function App() {
           {renderView()}
         </main>
       </div>
+      <ToastStack
+        notifications={notifications}
+        toastIds={toastIds}
+        leavingIds={leavingIds}
+        onFinish={finishToast}
+        onDismiss={dismiss}
+      />
     </div>
   );
 }

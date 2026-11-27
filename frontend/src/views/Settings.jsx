@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
-export default function Settings({ user, onUpdateProfile, onDeleteData }) {
+export default function Settings({ user, onUpdateProfile, onDeleteData, notifyDone, onNotifyDoneChange }) {
   const [displayName, setDisplayName] = useState(user?.display_name || '');
-  const [notifyDone, setNotifyDone] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [deleteSummary, setDeleteSummary] = useState('');
@@ -93,7 +92,7 @@ export default function Settings({ user, onUpdateProfile, onDeleteData }) {
         <div className="set-row">
           <div className="set-info"><b>Завершение обработки</b><span>Сообщать, когда проект готов</span></div>
           <label className="switch">
-            <input type="checkbox" checked={notifyDone} onChange={e => setNotifyDone(e.target.checked)} /><span></span>
+            <input type="checkbox" checked={notifyDone} onChange={e => onNotifyDoneChange(e.target.checked)} /><span></span>
           </label>
         </div>
       </div>
