@@ -709,9 +709,11 @@ export default function App() {
         ? 'done'
         : task.status === 'failed'
           ? 'err'
-          : task.status === 'queued'
-            ? 'queue'
-            : 'run',
+          : task.status === 'cancelled' || task.status === 'cancelling'
+            ? 'cancel'
+            : task.status === 'queued'
+              ? 'queue'
+              : 'run',
       progress: task.progress,
       meta: `${task.kind}${task.message ? `, ${task.message}` : ''}`,
       hue: 205 + index * 24,
@@ -760,6 +762,11 @@ export default function App() {
     }, 0);
   };
 
+  const openProjects = (filter: string) => {
+    setProjectFilter(filter);
+    setView('projects');
+  };
+
   const renderProcessView = () => (
     <>
       <NewProcess
@@ -801,6 +808,7 @@ export default function App() {
       projects={projectsForUi}
       onNewProcess={() => setView('new')}
       onPlanChange={buyPlan}
+      onOpenProjects={openProjects}
     />
   );
 
