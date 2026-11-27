@@ -340,6 +340,8 @@ export default function App() {
     }
   });
   const notifiedJobs = useRef(new Set<string>());
+  const pendingExportJobs = useRef(new Set<string>());
+  const notifiedExportJobs = useRef(new Set<string>());
   const currentUserId = user ? (user as User).id : null;
   const tokenBalance = user ? (user as User).token_balance : 0;
   const [view, setView] = useState<View>('landing');
@@ -375,6 +377,8 @@ export default function App() {
   const resetWorkspace = () => {
     uploadSequence.current += 1;
     notifiedJobs.current.clear();
+    pendingExportJobs.current.clear();
+    notifiedExportJobs.current.clear();
     setFile(null);
     setVideo(null);
     setJob(null);
@@ -678,6 +682,36 @@ export default function App() {
       message: 'Обработка остановлена, результат создан не будет.',
     });
   }, [job?.id, job?.status, notify]);
+
+  useEffect(() => {
+    projects.forEach((project) => {
+      const exports = project.exports;
+      if (!exports.length) return;
+      const pending = exports.filter((task) => !['ready', 'failed', 'cancelled'].includes(task.status));
+      if (pending.length) {
+        pendingExportJobs.current.add(project.id);
+        return;
+      }
+      if (!pendingExportJobs.current.has(project.id) || notifiedExportJobs.current.has(project.id)) return;
+      notifiedExportJobs.current.add(project.id);
+      const ready = exports.filter((task) => task.status === 'ready').length;
+      const failed = exports.filter((task) => task.status === 'failed').length;
+      const cancelled = exports.filter((task) => task.status === 'cancelled').length;
+      if (failed || cancelled) {
+        notify({
+          kind: failed ? 'danger' : 'info',
+          title: 'Экспорты завершены',
+          message: `Готово: ${ready}, с ошибками: ${failed}, отменено: ${cancelled}.`,
+        });
+      } else {
+        notify({
+          kind: 'success',
+          title: 'Экспорты готовы',
+          message: `Завершено экспортов: ${ready}. Файлы доступны в проектах.`,
+        });
+      }
+    });
+  }, [projects, notify]);
 
   // Load the workspace as soon as the session is known, so the dashboard
   // counters are correct on the first render after login or page reload.
