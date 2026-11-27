@@ -80,6 +80,7 @@ export interface Job {
   result_id: string | null;
   error: JobError | null;
   credits_cost: number;
+  credits_refunded: boolean;
   created_at: string;
   started_at: string | null;  
   finished_at: string | null;  
@@ -121,6 +122,7 @@ export interface ExportJob {
   error_code: string | null;
   user_message: string | null;
   credits_cost: number;
+  credits_refunded: boolean;
   created_at: string;
 }
 
@@ -137,6 +139,7 @@ export interface Project {
   result_id: string | null;
   error: JobError | null;
   credits_cost: number;
+  credits_refunded: boolean;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;

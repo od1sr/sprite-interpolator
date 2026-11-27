@@ -681,6 +681,8 @@ def test_list_jobs_returns_projects_with_nested_exports(client, monkeypatch):
     assert all(item["video_filename"] == "source.mp4" for item in projects["items"])
     second_project = next(item for item in projects["items"] if item["id"] == second["id"])
     assert [item["id"] for item in second_project["exports"]] == [export["id"]]
+    assert all(item["credits_refunded"] is False for item in projects["items"])
+    assert second_project["exports"][0]["credits_refunded"] is False
     first_project = next(item for item in projects["items"] if item["id"] == first["id"])
     assert first_project["exports"] == []
 

@@ -916,6 +916,25 @@ ul,ol{margin:0;padding:0;list-style:none}
 .proj-name > .truncate{flex:1}
 .proj-name .pill{flex:0 0 auto}
 .proj-meta{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Cost stub: a receipt tear-off, not a status chip. */
+.proj-cost{
+  flex:0 0 78px;align-self:stretch;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:4px;
+  padding-left:14px;border-left:1px dashed var(--line-2);
+}
+.proj-cost-value{
+  font-family:var(--mono);font-size:16px;font-weight:600;letter-spacing:-.03em;line-height:1;
+  font-variant-numeric:tabular-nums;color:var(--text);
+}
+.proj-cost-label{
+  font-family:var(--mono);font-size:9px;letter-spacing:.16em;line-height:1;
+  text-transform:uppercase;color:var(--faint);
+}
+.proj-cost--refund .proj-cost-value{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--ok)}
+.proj-cost--refund .proj-cost-label{color:var(--ok)}
+.proj-cost--compact{flex-basis:58px;padding-left:10px}
+.proj-cost--compact .proj-cost-value{font-size:13px}
+.proj-cost--compact .proj-cost-label{font-size:8px}
 .proj-bar{display:flex;align-items:center;gap:10px;width:156px;flex:0 0 auto}
 .bar{height:5px;border-radius:99px;background:rgba(15,23,42,.09);overflow:hidden;flex:1;position:relative}
 .bar > i{display:block;height:100%;border-radius:99px;background:var(--accent);transition:width .45s ease}
@@ -1082,6 +1101,8 @@ tbody tr:hover{background:rgba(15,23,42,.025)}
   .proj-subtasks{margin-left:0;padding-left:22px}
   .proj-subtask{flex-wrap:wrap}
   .proj-subtask .proj-bar{width:100%;order:4;padding-left:0}
+  .proj-cost{flex-basis:64px;padding-left:10px}
+  .proj-cost--compact{flex-basis:52px;padding-left:8px}
   .settings-grid{grid-template-columns:1fr}
   .step-head{flex-direction:column;align-items:flex-start;gap:8px}
   .step-head .muted-sm{padding-left:46px}
@@ -1117,4 +1138,6 @@ tbody tr:hover{background:rgba(15,23,42,.025)}
   .footer-inner{flex-direction:column}
   .stats{grid-template-columns:1fr}
   .proj-steps{grid-template-columns:1fr}
+  .proj-cost{flex-basis:52px;gap:3px}
+  .proj-cost--compact{flex-basis:46px}
 }

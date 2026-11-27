@@ -64,6 +64,8 @@ interface TaskView {
   message?: string;
   downloadUrl?: string;
   createdAt: string;
+  credits: number;
+  refunded: boolean;
 }
 
 function mergeExports(base: ExportJob[], updates: ExportJob[]): ExportJob[] {
@@ -153,6 +155,28 @@ const STEP_LABELS: Record<string, string> = {
   color_correct: 'Коррекция цвета',
 };
 
+function TokenCost({
+  credits,
+  refunded,
+  compact = false,
+}: {
+  credits: number;
+  refunded: boolean;
+  compact?: boolean;
+}) {
+  const amount = new Intl.NumberFormat('ru-RU').format(credits || 0);
+  const wasRefunded = refunded && credits > 0;
+  return (
+    <div
+      className={`proj-cost${compact ? ' proj-cost--compact' : ''}${wasRefunded ? ' proj-cost--refund' : ''}`}
+      title={wasRefunded ? 'Списание отменено, токены возвращены' : 'Токены, списанные за задачу'}
+    >
+      <span className="proj-cost-value">{wasRefunded ? amount : `−${amount}`}</span>
+      <span className="proj-cost-label">{wasRefunded ? 'возврат' : 'токены'}</span>
+    </div>
+  );
+}
+
 function buildJobSteps(
   scale: number,
   fps: number,
@@ -203,6 +227,7 @@ function SubtaskRow({ task }: { task: TaskView }) {
         </div>
         <span className="pct">{Math.round(isReady ? 100 : progress)}%</span>
       </div>
+      <TokenCost credits={task.credits} refunded={task.refunded} compact />
       {task.downloadUrl && (
         <a className="btn btn-ghost btn-sm" href={task.downloadUrl} download>
           Скачать
@@ -278,6 +303,7 @@ function TaskRow({
           <span className="pct">{Math.round(isReady ? 100 : progress)}%</span>
         </div>
       )}
+      <TokenCost credits={task.credits} refunded={task.refunded} />
       {['queued', 'processing', 'cancelling'].includes(task.status) && onCancel && (
         <button
           className="btn btn-ghost btn-sm task-cancel"
@@ -444,6 +470,7 @@ export default function App() {
           result_id: createdJob.result_id,
           error: createdJob.error,
           credits_cost: createdJob.credits_cost,
+          credits_refunded: createdJob.credits_refunded,
           created_at: createdJob.created_at,
           started_at: createdJob.started_at,
           finished_at: createdJob.finished_at,
@@ -634,6 +661,8 @@ export default function App() {
         ? resolveApiUrl(`exports/${exportJob.id}/download`)
         : undefined,
       createdAt: exportJob.created_at,
+      credits: exportJob.credits_cost,
+      refunded: exportJob.credits_refunded,
     };
   };
 
@@ -663,6 +692,8 @@ export default function App() {
         ? resolveApiUrl(project.download_url)
         : undefined,
       createdAt: project.created_at,
+      credits: project.credits_cost,
+      refunded: project.credits_refunded,
     };
   }).sort((first, second) => second.createdAt.localeCompare(first.createdAt)), [
     clock,

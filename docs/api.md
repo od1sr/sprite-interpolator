@@ -98,6 +98,7 @@ flowchart TD
 | `result_id`    | `UUID \| null`     | Да, если `status`=`completed`. Иначе - нет | Идентификатор результата после успешной обработки (`null` если `status` != `completed`) |
 | `error`        | `JobError \| null` | Нет                                        | Описание ошибки при неудачном выполнении                                                |
 | `credits_cost` | `integer`          | Да                                         | Токены, списанные за обработку                                                          |
+| `credits_refunded` | `boolean`      | Да                                         | `true`, если списание отменено и токены возвращены (фактически потрачено `0`)            |
 | `credits_breakdown` | `object \| null` | Нет                                    | Разбор коэффициентов и формулы расчёта стоимости                                        |
 | `created_at`   | `datetime`         | Да                                         | Время создания в формате ISO 8601 UTC, с суффиксом Z                                    |
 | `started_at`   | `datetime \| null` | Нет                                        | Время начала обработки в формате ISO 8601 UTC, с суффиксом Z                            |
@@ -152,6 +153,7 @@ flowchart TD
   "result_id": null,
   "error": null,
   "credits_cost": 180,
+  "credits_refunded": false,
   "credits_breakdown": {
     "duration_seconds": 60,
     "duration_minutes": 1,
@@ -1009,6 +1011,7 @@ credits = ceil(100 × duration_minutes × K_resolution × K_fps × K_operations)
   "result_id": null,
   "error": null,
   "credits_cost": 250,
+  "credits_refunded": false,
   "credits_breakdown": {
     "duration_seconds": 60,
     "duration_minutes": 1,

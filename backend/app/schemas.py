@@ -170,6 +170,7 @@ class JobResponse(APIModel):
     result_id: UUID | None
     error: dict[str, Any] | None
     credits_cost: int
+    credits_refunded: bool
     credits_breakdown: dict[str, Any] | None
     created_at: datetime
     started_at: datetime | None
@@ -207,6 +208,7 @@ class ExportJobResponse(APIModel):
     error_code: str | None
     user_message: str | None
     credits_cost: int
+    credits_refunded: bool
     created_at: datetime
 
 class ProjectResponse(APIModel):
@@ -221,6 +223,7 @@ class ProjectResponse(APIModel):
     result_id: UUID | None
     error: dict[str, Any] | None
     credits_cost: int
+    credits_refunded: bool
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None

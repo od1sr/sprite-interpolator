@@ -702,6 +702,7 @@ def list_jobs(
             "result_id": job.result_id,
             "error": job.error,
             "credits_cost": job.credits_cost,
+            "credits_refunded": job.credits_refunded,
             "created_at": job.created_at,
             "started_at": job.started_at,
             "finished_at": job.finished_at,
