@@ -667,6 +667,18 @@ export default function App() {
     });
   }, [job?.id, job?.status, notifyDone, notify]);
 
+  useEffect(() => {
+    if (job?.status !== 'cancelled') return;
+    const key = `cancel:${job.id}`;
+    if (notifiedJobs.current.has(key)) return;
+    notifiedJobs.current.add(key);
+    notify({
+      kind: 'info',
+      title: 'Задача отменена',
+      message: 'Обработка остановлена, результат создан не будет.',
+    });
+  }, [job?.id, job?.status, notify]);
+
   // Load the workspace as soon as the session is known, so the dashboard
   // counters are correct on the first render after login or page reload.
   useEffect(() => {
