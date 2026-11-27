@@ -163,6 +163,13 @@ export interface User {
   created_at: string;
 }
 
+export interface AccountDataDeletion {
+  videos: number;
+  jobs: number;
+  results: number;
+  exports: number;
+}
+
 export interface RegisterRequest {
   username: string;
   password: string;

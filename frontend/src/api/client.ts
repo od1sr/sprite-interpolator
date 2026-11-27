@@ -1,4 +1,5 @@
 import type {
+  AccountDataDeletion,
   AdaptationMode,
   CreateJobStep,
   ExportJob,
@@ -81,6 +82,10 @@ export function getCurrentUser(): Promise<User> {
 
 export async function logoutUser(): Promise<void> {
   await request<void>('/auth/logout', { method: 'POST' });
+}
+
+export function deleteAllUserData(): Promise<AccountDataDeletion> {
+  return request<AccountDataDeletion>('/account/data', { method: 'DELETE' });
 }
 
 export function purchasePlan(payload: PurchasePlanRequest): Promise<User> {

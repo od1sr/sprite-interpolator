@@ -266,5 +266,12 @@ class PaymentOut(APIModel):
     created_at: datetime
 
 
+class AccountDataDeletionOut(APIModel):
+    videos: int
+    jobs: int
+    results: int
+    exports: int
+
+
 class PlanPurchaseIn(BaseModel):
     plan: str = Field(min_length=1, max_length=32)

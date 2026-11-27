@@ -3,6 +3,7 @@ import {
   ApiError,
   cancelJob,
   createJob,
+  deleteAllUserData,
   createVideoExport,
   estimateJob,
   getJobResult,
@@ -380,6 +381,13 @@ export default function App() {
 
   const toggleTheme = () => {
     setTheme((current) => current === 'dark' ? 'light' : 'dark');
+  };
+
+  const handleDeleteAllData = async () => {
+    const result = await deleteAllUserData();
+    resetWorkspace();
+    await refreshUser();
+    return result;
   };
 
   useEffect(() => {
@@ -854,7 +862,7 @@ export default function App() {
       case 'projects':
         return renderProjects();
       case 'settings':
-        return <Settings user={user} onUpdateProfile={updateProfile} />;
+        return <Settings user={user} onUpdateProfile={updateProfile} onDeleteData={handleDeleteAllData} />;
       default:
         return renderDashboard();
     }

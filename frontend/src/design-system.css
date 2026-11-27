@@ -118,6 +118,8 @@ ul,ol{margin:0;padding:0;list-style:none}
 .btn-primary:hover{background:var(--accent-hover);box-shadow:0 10px 26px rgba(255,77,46,.30),inset 0 -2px 0 rgba(0,0,0,.08)}
 .btn-ghost{border-color:var(--line-2);color:var(--text);background:var(--surface);box-shadow:var(--shadow-sm)}
 .btn-ghost:hover{background:var(--surface-2);border-color:rgba(15,23,42,.28)}
+.btn-danger{background:var(--err);color:#FFFFFF;font-weight:650}
+.btn-danger:hover{background:#BF3535;box-shadow:0 10px 26px rgba(214,69,69,.24)}
 .btn-lg{height:50px;padding:0 25px;font-size:15px;border-radius:12px}
 .btn-sm{height:32px;padding:0 12px;font-size:12.5px;border-radius:8px}
 .btn-block{width:100%}
@@ -646,13 +648,8 @@ ul,ol{margin:0;padding:0;list-style:none}
 }
 .welcome-title{font-size:clamp(24px,3.2vw,34px);letter-spacing:-.035em;font-weight:400}
 .welcome-sub{color:var(--muted);font-size:14px;margin-top:7px;max-width:560px}
-.workbench-intro,.projects-head{margin-bottom:16px}
-.flowline{
-  display:flex;align-items:center;gap:12px;margin:-8px 0 22px;flex-wrap:wrap;
-  font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--faint);
-}
-.flowline i{display:block;width:34px;height:1px;background:var(--line-2);position:relative}
-.flowline i::after{content:'';position:absolute;right:0;top:-2px;width:5px;height:5px;border-top:1px solid var(--line-2);border-right:1px solid var(--line-2);transform:rotate(45deg)}
+.workbench-intro{margin-bottom:22px}
+.projects-head{margin-bottom:16px}
 
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:24px}
 .dashboard-billing{border-top:1px solid var(--line);padding-top:24px;margin-top:8px;scroll-margin-top:24px}
@@ -1054,6 +1051,10 @@ button.stat:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .set-row:first-of-type{border-top:none;padding-top:0}
 .set-info b{font-size:14px;font-weight:600;display:block}
 .set-info span{font-size:13px;color:var(--muted);display:block;margin-top:2px}
+.settings-danger{border-color:rgba(214,69,69,.28)}
+.settings-danger .panel-head h3{color:var(--err)}
+.settings-danger-message{font-size:13px;line-height:1.5;color:var(--muted);margin:4px 0 0}
+.settings-danger-message.is-error{color:var(--err)}
 .switch{position:relative;display:inline-block;width:40px;height:22px;flex:0 0 auto}
 .switch input{opacity:0;width:0;height:0;position:absolute}
 .switch span{position:absolute;inset:0;background:rgba(15,23,42,.16);border-radius:99px;transition:.2s;cursor:pointer}
@@ -1143,6 +1144,9 @@ tbody tr:hover{background:rgba(15,23,42,.025)}
 
 /* Dark-theme corrections for the few hard-coded light surfaces. */
 [data-theme='dark'] .brand-mark{filter:brightness(0) invert(1);opacity:.95}
+[data-theme='dark'] .btn-danger{background:rgba(255,112,112,.14);color:var(--err);border-color:rgba(255,112,112,.38)}
+[data-theme='dark'] .btn-danger:hover{background:rgba(255,112,112,.22);box-shadow:none}
+[data-theme='dark'] .settings-danger{border-color:rgba(255,112,112,.22)}
 [data-theme='dark'] .btn-ghost:hover,
 [data-theme='dark'] .icon-btn:hover,
 [data-theme='dark'] .side-item:hover,

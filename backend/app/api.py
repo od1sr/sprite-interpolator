@@ -44,6 +44,7 @@ from app.models import ExportJob, Job, Payment, Result, User, Video
 from app.pricing import PricingError, estimate_job_cost, fps_coefficient, resolution_coefficient
 from app.queue import celery_app
 from app.schemas import (
+    AccountDataDeletionOut,
     ExportJobCreate,
     ColorPreviewRequest,
     ExportJobResponse,
@@ -337,6 +338,89 @@ def logout(response: Response) -> Response:
     clear_auth_cookie(response)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
+
+
+@router.delete("/account/data", response_model=AccountDataDeletionOut)
+def delete_account_data(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> dict[str, int]:
+    """Erase every video, job, result and export owned by the current user.
+
+    The account itself, its token balance and payment history stay intact.
+    Only rows filtered by the authenticated user id are touched, and only the
+    user's own storage directory is staged for deletion.
+    """
+    user_root = _owned_storage_path(user_relative_path(user.id).as_posix(), user.id)
+    exports = session.scalars(
+        select(ExportJob).where(ExportJob.user_id == user.id).with_for_update()
+    ).all()
+    jobs = session.scalars(
+        select(Job).where(Job.user_id == user.id).with_for_update()
+    ).all()
+    videos = session.scalars(
+        select(Video).where(Video.user_id == user.id).with_for_update()
+    ).all()
+    results_count = session.scalar(
+        select(func.count(Result.id)).where(Result.user_id == user.id)
+    ) or 0
+
+    # Stop queued and running work before its files disappear. Pre-start
+    # cancellations follow the same refund policy as the cancel endpoints.
+    revoked_ids: list[str] = []
+    now = datetime.now(timezone.utc)
+    for job in jobs:
+        if job.status == "queued":
+            refund_job(session, job)
+        if job.status in ACTIVE_STATUSES:
+            job.status = "cancelled"
+            job.message = "Данные удалены пользователем"
+            job.finished_at = now
+            revoked_ids.append(str(job.id))
+    for export in exports:
+        if export.status == "queued":
+            refund_export(session, export)
+        if export.status in {"queued", "analyzing", "processing", "cancelling"}:
+            export.status = "cancelled"
+            export.user_message = "Данные удалены пользователем"
+            export.finished_at = now
+            revoked_ids.append(str(export.id))
+
+    for task_id in revoked_ids:
+        try:
+            celery_app.control.revoke(task_id, terminate=True)
+        except Exception:
+            logger.exception("Unable to revoke task %s during data deletion", task_id)
+
+    staged_paths: list[tuple[Path, Path | None]] = [(user_root, None)]
+    try:
+        staged_paths[0] = (user_root, _stage_path_for_deletion(user_root))
+        for export in exports:
+            session.delete(export)
+        for job in jobs:
+            session.delete(job)  # ORM cascade removes the linked Result
+        for video in videos:
+            session.delete(video)
+        session.commit()
+    except (OSError, SQLAlchemyError) as exc:
+        session.rollback()
+        _restore_staged_paths(staged_paths)
+        logger.exception("Failed to delete workspace data for user %s", user.id)
+        raise APIError(500, "INTERNAL_ERROR", "Не удалось удалить данные") from exc
+
+    try:
+        for _, staged in staged_paths:
+            _purge_staged_path(staged)
+    except OSError as exc:
+        logger.exception("Failed to purge files for deleted user data %s", user.id)
+        raise APIError(500, "INTERNAL_ERROR", "Не удалось завершить удаление данных") from exc
+
+    return {
+        "videos": len(videos),
+        "jobs": len(jobs),
+        "results": results_count,
+        "exports": len(exports),
+    }
 
 
 @router.post("/billing/purchase", response_model=UserOut)

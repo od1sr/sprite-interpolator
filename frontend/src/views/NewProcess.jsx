@@ -373,10 +373,6 @@ export default function NewProcess({
         </p>
       </div>
 
-      <div className="flowline" aria-hidden="true">
-        <span>01 SOURCE</span><i /><span>02 PIPELINE</span><i /><span>03 EXPORT</span>
-      </div>
-
       <div className="panel">
         <StepHeader
           number="1"

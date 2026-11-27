@@ -873,3 +873,92 @@ def test_users_cannot_see_or_use_another_users_resources(client, monkeypatch, us
     test_client.cookies.set(api.settings.auth_cookie_name, create_access_token(user.id))
     assert test_client.get("/api/v1/videos").json()["total"] == 1
     assert test_client.get("/api/v1/jobs").json()["total"] == 1
+
+
+def test_delete_all_account_data_clears_only_current_user_data(client, monkeypatch, user):
+    test_client, sessions = client
+    from app import api
+    from app.auth import create_access_token, hash_password
+    from app.models import User
+
+    monkeypatch.setattr(api.process_job, "apply_async", lambda args: None)
+    monkeypatch.setattr(api.process_export_job, "apply_async", lambda args: None)
+
+    balance_before = test_client.get("/api/v1/auth/me").json()["token_balance"]
+    video_id = upload(test_client, monkeypatch).json()["id"]
+    job_id = test_client.post(
+        "/api/v1/jobs",
+        json={"video_id": video_id, "steps": [{"type": "upscale", "parameters": {"scale": 2}}]},
+    ).json()["id"]
+    export_id = test_client.post(
+        f"/api/v1/videos/{video_id}/exports",
+        json={"profile_id": "youtube_standard_v1", "adaptation_mode": "crop"},
+    ).json()["id"]
+
+    with sessions.begin() as session:
+        job = session.get(Job, UUID(job_id))
+        result = Result(
+            user_id=user.id,
+            job_id=job.id,
+            filename="render.mp4",
+            content_type="video/mp4",
+            size_bytes=7,
+            storage_key=user_relative_path(user.id, "results", str(job.id), "render.mp4").as_posix(),
+        )
+        session.add(result)
+        session.add(Payment(user_id=user.id, plan="free", amount_rub=0, tokens=300, status="free"))
+        session.flush()
+        job.result_id = result.id
+
+    result_path = api.settings.storage_root / user_relative_path(
+        user.id, "results", str(job_id), "render.mp4"
+    )
+    result_path.parent.mkdir(parents=True, exist_ok=True)
+    result_path.write_bytes(b"render!")
+
+    # A second user keeps their video file and database rows.
+    with sessions.begin() as session:
+        other = User(username="otherdata", password_hash=hash_password("password123"))
+        session.add(other)
+        session.flush()
+        other_video = Video(
+            user_id=other.id,
+            filename="source.mp4",
+            content_type="video/mp4",
+            size_bytes=10,
+            storage_key=user_relative_path(other.id, "uploads", "source.mp4").as_posix(),
+        )
+        session.add(other_video)
+        session.flush()
+        other_video_id = other_video.id
+    other_path = api.settings.storage_root / user_relative_path(other.id, "uploads", "source.mp4")
+    other_path.parent.mkdir(parents=True, exist_ok=True)
+    other_path.write_bytes(b"other!")
+
+    response = test_client.delete("/api/v1/account/data")
+    assert response.status_code == 200
+    assert response.json() == {"videos": 1, "jobs": 1, "results": 1, "exports": 1}
+
+    assert not (api.settings.storage_root / "users" / str(user.id)).exists()
+    assert other_path.read_bytes() == b"other!"
+    assert test_client.get("/api/v1/auth/me").json()["token_balance"] == balance_before
+
+    with sessions() as session:
+        assert session.scalars(select(Video).where(Video.user_id == user.id)).all() == []
+        assert session.scalars(select(Job).where(Job.user_id == user.id)).all() == []
+        assert session.scalars(select(Result).where(Result.user_id == user.id)).all() == []
+        assert session.scalars(select(ExportJob).where(ExportJob.user_id == user.id)).all() == []
+        assert session.get(Video, other_video_id) is not None
+        assert session.get(User, user.id) is not None
+        assert session.scalars(select(Payment).where(Payment.user_id == user.id)).all() != []
+
+    # Repeating the call is harmless: there is nothing left to delete.
+    assert test_client.delete("/api/v1/account/data").json() == {
+        "videos": 0, "jobs": 0, "results": 0, "exports": 0,
+    }
+
+
+def test_delete_all_account_data_requires_auth(client):
+    test_client, _ = client
+    test_client.cookies.clear()
+    assert test_client.delete("/api/v1/account/data").status_code == 401

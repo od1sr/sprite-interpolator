@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
 
-export default function Settings({ user, onUpdateProfile }) {
+export default function Settings({ user, onUpdateProfile, onDeleteData }) {
   const [displayName, setDisplayName] = useState(user?.display_name || '');
   const [notifyDone, setNotifyDone] = useState(true);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteSummary, setDeleteSummary] = useState('');
 
   useEffect(() => {
     setDisplayName(user?.display_name || '');
@@ -12,6 +15,26 @@ export default function Settings({ user, onUpdateProfile }) {
     event.preventDefault();
     onUpdateProfile({ display_name: displayName.trim() || null });
     alert('Имя сохранено в этом браузере');
+  };
+
+  const handleDeleteData = async () => {
+    const confirmed = window.confirm(
+      'Удалить все ваши видео, задачи, результаты и экспорты? Аккаунт, баланс и история платежей сохранятся. Это действие нельзя отменить.'
+    );
+    if (!confirmed) return;
+    setDeleting(true);
+    setDeleteError('');
+    setDeleteSummary('');
+    try {
+      const result = await onDeleteData();
+      setDeleteSummary(
+        `Удалено: видео — ${result.videos}, задач — ${result.jobs}, результатов — ${result.results}, экспортов — ${result.exports}.`
+      );
+    } catch (error) {
+      setDeleteError(error instanceof Error && error.message ? error.message : 'Не удалось удалить данные');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -73,6 +96,26 @@ export default function Settings({ user, onUpdateProfile }) {
             <input type="checkbox" checked={notifyDone} onChange={e => setNotifyDone(e.target.checked)} /><span></span>
           </label>
         </div>
+      </div>
+
+      <div className="panel settings-danger">
+        <div className="panel-head"><h3>Данные и проекты</h3></div>
+        <div className="set-row">
+          <div className="set-info">
+            <b>Удалить все данные</b>
+            <span>Стирает ваши видео, задачи, результаты и экспорты. Баланс, тариф и история платежей остаются.</span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-danger"
+            onClick={handleDeleteData}
+            disabled={deleting}
+          >
+            {deleting ? 'Удаляем…' : 'Удалить все данные'}
+          </button>
+        </div>
+        {deleteError && <p className="settings-danger-message is-error" role="alert">{deleteError}</p>}
+        {deleteSummary && <p className="settings-danger-message" role="status">{deleteSummary}</p>}
       </div>
     </div>
   );
