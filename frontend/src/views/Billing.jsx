@@ -32,25 +32,30 @@ export default function Billing({ user, onPlanChange }) {
     }
   };
 
-  const renderPlanCard = (plan) => (
-    <div className="plan-opt" key={plan.id}>
-      <b>{plan.name}</b>
-      <span>{plan.price}</span>
-      <span style={{ color: 'var(--accent)', fontWeight: 600, fontSize: 13 }}>
-        +{formatNumber(plan.tokens)} токенов
-      </span>
-      <span style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{plan.rule}</span>
-      <button
-        className="btn btn-ghost btn-sm"
-        onClick={() => handleBuy(plan)}
-        disabled={busyPlan !== null}
-      >
-        {busyPlan === plan.id
-          ? 'Начисляем…'
-          : currentPlanId === plan.id ? 'Купить ещё' : 'Купить'}
-      </button>
-    </div>
-  );
+  const renderPlanCard = (plan) => {
+    const isRegistrationOnly = plan.id === 'free';
+    return (
+      <div className="plan-opt" key={plan.id}>
+        <b>{plan.name}</b>
+        <span>{plan.price}</span>
+        <span style={{ color: 'var(--accent)', fontWeight: 600, fontSize: 13 }}>
+          +{formatNumber(plan.tokens)} токенов
+        </span>
+        <span style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{plan.rule}</span>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => handleBuy(plan)}
+          disabled={isRegistrationOnly || busyPlan !== null}
+        >
+          {isRegistrationOnly
+            ? 'Выдан при регистрации'
+            : busyPlan === plan.id
+              ? 'Начисляем…'
+              : currentPlanId === plan.id ? 'Купить ещё' : 'Купить'}
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div>

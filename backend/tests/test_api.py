@@ -754,6 +754,15 @@ def test_plan_purchase_rejects_unknown_plan(client):
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+def test_plan_purchase_rejects_free_after_registration(client, user):
+    test_client, sessions = client
+    response = test_client.post("/api/v1/billing/purchase", json={"plan": "free"})
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "PLAN_UNAVAILABLE"
+    with sessions() as session:
+        assert session.get(User, user.id).token_balance == 300
+
+
 def test_plan_purchase_requires_auth(client):
     test_client, _ = client
     test_client.cookies.clear()

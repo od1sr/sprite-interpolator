@@ -334,6 +334,13 @@ def purchase_plan(
     session: Session = Depends(get_session),
 ) -> User:
     plan = payload.plan.strip().lower()
+    if plan == "free":
+        raise APIError(
+            422,
+            "PLAN_UNAVAILABLE",
+            "Тариф Free выдаётся только при регистрации и недоступен для покупки",
+            {"plan": plan},
+        )
     if plan not in PLAN_TOKENS:
         raise APIError(
             422,
