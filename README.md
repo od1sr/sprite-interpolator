@@ -118,3 +118,7 @@ poetry run pytest
 
 - [Контракт API](docs/api.md)
 - [Диаграммы последовательностей](docs/api_sequence_diagram.md)
+
+### Two NVIDIA GPUs (Docker CDI)
+
+The AI image contains the matching RIFE and Real-ESRGAN checkpoints. Compose checks model readiness before starting dependent services. For a two-GPU host, include `compose.gpu.cdi.yaml` after the base and any site overrides, e.g. `COMPOSE_FILE=compose.yaml:compose.override.yaml:compose.gpu.cdi.yaml` in the Linux deployment .env. RIFE runs on GPU 0 and Real-ESRGAN on GPU 1.

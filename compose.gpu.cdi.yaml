@@ -1,0 +1,9 @@
+services:
+  ai:
+    devices:
+      - nvidia.com/gpu=0
+      - nvidia.com/gpu=1
+    environment:
+      AI_REQUIRE_CUDA: "1"
+      INTERPOLATOR_DEVICE: cuda:0
+      UPSCALER_DEVICE: cuda:1

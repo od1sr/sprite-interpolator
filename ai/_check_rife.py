@@ -1,8 +1,3 @@
-
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path("weights/rife").resolve()))
-
 from interpolation_model import IFNet
 from safetensors.torch import load_file
 

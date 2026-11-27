@@ -7,13 +7,6 @@ import math
 from pathlib import Path
 from typing import List
 from safetensors.torch import load_file
-import sys
-
-RIFE_DIR = Path(__file__).resolve().parent / "weights" / "rife"
-if not RIFE_DIR.exists():
-    raise FileNotFoundError(f"RIFE weights dir not found: {RIFE_DIR}")
-sys.path.insert(0, str(RIFE_DIR))
-
 import interpolation_model as rife_model
 from audio import finalize_video
 from cancellation import ProcessingCancelled, is_cancelled

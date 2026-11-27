@@ -195,11 +195,6 @@ Get-File `
     (Join-Path $wRife "flownet.safetensors") `
     5MB
 
-Get-File `
-    "https://huggingface.co/TensorForger/RIFE-safetensors/resolve/main/interpolation_model.py" `
-    (Join-Path $wRife "interpolation_model.py") `
-    1KB
-
 # =====================================================================
 # 7/7 Финальная проверка
 # =====================================================================

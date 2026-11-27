@@ -102,9 +102,8 @@ services:
       - "${AI_PORT:-8001}:8001"
     volumes:
       - shared-storage:/shared/storage
-      - ./ai/weights:/app/weights:ro
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/internal/v1/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/internal/v1/ready', timeout=3)"]
       interval: 10s
       timeout: 5s
       retries: 10

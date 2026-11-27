@@ -5,7 +5,9 @@
 **/node_modules
 **/dist
 backend/storage
-ai/weights
+ai/weights/**/*
+!ai/weights/rife/flownet.safetensors
+!ai/weights/realesrgan/realesr-animevideov3.pth
 ai/BasicSR-src
 ai/test_*.mp4
 ai/test.txt

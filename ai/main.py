@@ -42,6 +42,9 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("AI Service: GPU недоступна в контейнере, обработка на CPU (FP32)")
 
+    if os.getenv("AI_REQUIRE_CUDA") == "1" and not cuda_available:
+        raise RuntimeError("CUDA is required by the deployment")
+
     weights = Path(os.getenv("MODEL_PATH", "weights"))
     upscaler_weights = weights / "realesrgan" / "realesr-animevideov3.pth"
     interpolator_weights = weights / "rife" / "flownet.safetensors"
@@ -53,7 +56,7 @@ async def lifespan(app: FastAPI):
             from upscaler import VideoUpscaler
 
             upscaler_model = VideoUpscaler(
-                model_path=str(upscaler_weights), scale=4, tile_size=256, device="cuda"
+                model_path=str(upscaler_weights), scale=4, tile_size=256, device=os.getenv("UPSCALER_DEVICE", "cuda")
             )
             logger.info("Real-ESRGAN загружена: device=%s", upscaler_model.device)
         except Exception as exc:
@@ -66,7 +69,7 @@ async def lifespan(app: FastAPI):
             from interpolator import VideoInterpolator
 
             interpolator_model = VideoInterpolator(
-                model_path=str(interpolator_weights), device="cuda"
+                model_path=str(interpolator_weights), device=os.getenv("INTERPOLATOR_DEVICE", "cuda")
             )
             logger.info(
                 "RIFE загружена: device=%s, dtype=%s",
@@ -98,6 +101,13 @@ def _error(status: int, code: str, message: str) -> JSONResponse:
 @app.get("/internal/v1/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/internal/v1/ready")
+def ready():
+    if interpolator_model is None or upscaler_model is None:
+        return _error(503, "model_not_ready", "Video models are not loaded")
+    return {"status": "ready"}
 
 
 @app.get("/internal/v1/models")
