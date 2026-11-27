@@ -26,7 +26,6 @@ import { useAuth } from './hooks/useAuth';
 import { formatDuration, getStepTiming } from './utils/processingTime';
 import Sidebar from './components/Sidebar';
 import Auth from './views/Auth';
-import Billing from './views/Billing';
 import Dashboard from './views/Dashboard';
 import Landing from './views/Landing';
 import NewProcess from './views/NewProcess';
@@ -34,7 +33,7 @@ import Projects from './views/Projects';
 import Settings from './views/Settings';
 import './App.css';
 
-type View = 'landing' | 'auth' | 'dashboard' | 'new' | 'projects' | 'settings' | 'billing';
+type View = 'landing' | 'auth' | 'dashboard' | 'new' | 'projects' | 'settings';
 
 interface ExportProfile {
   id: string;
@@ -138,7 +137,6 @@ const VIEW_TITLES: Record<View, string> = {
   new: 'Новая обработка',
   projects: 'Проекты',
   settings: 'Настройки аккаунта',
-  billing: 'Тариф и оплата',
 };
 
 function taskFilter(status: string): string {
@@ -723,6 +721,14 @@ export default function App() {
     )
   );
 
+  // Billing now lives on the dashboard; jump to it from the cost panel.
+  const goToBilling = () => {
+    setView('dashboard');
+    window.setTimeout(() => {
+      document.getElementById('billing-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  };
+
   const renderProcessView = () => (
     <>
       <NewProcess
@@ -752,7 +758,7 @@ export default function App() {
         estimateLoading={estimateLoading}
         estimateError={estimateError}
         tokenBalance={tokenBalance}
-        onTopUp={() => setView('billing')}
+        onTopUp={goToBilling}
         onStart={handleSubmit}
       />
     </>
@@ -763,6 +769,7 @@ export default function App() {
       user={user}
       projects={projectsForUi}
       onNewProcess={() => setView('new')}
+      onPlanChange={buyPlan}
     />
   );
 
@@ -787,8 +794,6 @@ export default function App() {
         return renderProjects();
       case 'settings':
         return <Settings user={user} onUpdateProfile={updateProfile} />;
-      case 'billing':
-        return <Billing user={user} onPlanChange={buyPlan} />;
       default:
         return renderDashboard();
     }

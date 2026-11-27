@@ -613,6 +613,7 @@ ul,ol{margin:0;padding:0;list-style:none}
 .flowline i::after{content:'';position:absolute;right:0;top:-2px;width:5px;height:5px;border-top:1px solid var(--line-2);border-right:1px solid var(--line-2);transform:rotate(45deg)}
 
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:24px}
+.dashboard-billing{border-top:1px solid var(--line);padding-top:24px;margin-top:8px;scroll-margin-top:24px}
 .stat{
   --tone:var(--accent);
   position:relative;min-height:138px;display:flex;flex-direction:column;justify-content:space-between;

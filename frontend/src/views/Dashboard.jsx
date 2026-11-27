@@ -1,6 +1,7 @@
 import React from 'react';
+import Billing from './Billing';
 
-export default function Dashboard({ user, projects, onNewProcess }) {
+export default function Dashboard({ user, projects, onNewProcess, onPlanChange }) {
   const firstName = (user?.display_name || user?.username || 'Пользователь').split(' ')[0];
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Доброе утро' : hour < 18 ? 'Добрый день' : 'Добрый вечер';
@@ -44,6 +45,10 @@ export default function Dashboard({ user, projects, onNewProcess }) {
           <div className="stat-foot"><span className="stat-warn">!</span> NEEDS REVIEW</div>
         </div>
       </div>
+
+      <section id="billing-section" className="dashboard-billing">
+        <Billing user={user} onPlanChange={onPlanChange} />
+      </section>
     </div>
   );
 }

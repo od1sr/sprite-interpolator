@@ -32,7 +32,6 @@ export default function Sidebar({ currentView, setView, user, getPlan }) {
     { id: 'new', label: 'Новая обработка', icon: 'M12 5v14M5 12h14' },
     { id: 'projects', label: 'Проекты', icon: 'M3 7.5A2 2 0 0 1 5 5.5h4l2 2.2h8a2 2 0 0 1 2 2v8.8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7.5Z' },
     { id: 'settings', label: 'Настройки', icon: settingsIcon, mobileOnly: true },
-    { id: 'billing', label: 'Тариф и оплата', icon: 'M2.5 5.5h19v13H2.5zM2.5 10h19' },
   ];
 
   return (
