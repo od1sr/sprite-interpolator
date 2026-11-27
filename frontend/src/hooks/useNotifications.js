@@ -1,14 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-const STORAGE_KEY = 'zarya.notifications';
+const STORAGE_PREFIX = 'zarya.notifications';
 export const NOTIFICATION_VISIBLE_MS = 8000;
 const EXIT_MS = 400;
 const MAX_NOTIFICATIONS = 30;
 const MAX_TOASTS = 4;
 
-function loadNotifications() {
+function storageKey(userId) {
+  return userId ? `${STORAGE_PREFIX}.${userId}` : null;
+}
+
+function loadNotifications(userId) {
+  const key = storageKey(userId);
+  if (!key) return [];
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(key);
     const items = raw ? JSON.parse(raw) : [];
     return Array.isArray(items)
       ? items.slice(0, MAX_NOTIFICATIONS).map((item) => ({ ...item, read: Boolean(item.read) }))
@@ -18,33 +24,54 @@ function loadNotifications() {
   }
 }
 
-export function useNotifications() {
-  const [notifications, setNotifications] = useState(loadNotifications);
+export function useNotifications(userId) {
+  const [state, setState] = useState(() => ({ userId, items: loadNotifications(userId) }));
+  const notifications = state.items;
   const [toastIds, setToastIds] = useState([]);
   const [leavingIds, setLeavingIds] = useState(() => new Set());
   const timers = useRef(new Map());
+
+  const updateNotifications = useCallback((updater) => {
+    setState((current) => (
+      current.userId === userId
+        ? { ...current, items: updater(current.items) }
+        : current
+    ));
+  }, [userId]);
+
+  const clearTimers = useCallback(() => {
+    timers.current.forEach((items) => items.forEach((timer) => window.clearTimeout(timer)));
+    timers.current.clear();
+  }, []);
+
+  // A different account gets its own list; visible toasts never leak between users.
+  useEffect(() => {
+    clearTimers();
+    setToastIds([]);
+    setLeavingIds(new Set());
+    setState({ userId, items: loadNotifications(userId) });
+  }, [userId, clearTimers]);
+
+  useEffect(() => {
+    const key = storageKey(userId);
+    if (!key || state.userId !== userId) return;
+    try {
+      window.localStorage.setItem(key, JSON.stringify(state.items));
+    } catch {
+      // Notifications still work for this session if storage is unavailable.
+    }
+  }, [state, userId]);
+
+  useEffect(() => clearTimers, [clearTimers]);
 
   const storeTimer = useCallback((id, timer) => {
     const current = timers.current.get(id) || [];
     timers.current.set(id, [...current, timer]);
   }, []);
 
-  const clearTimers = useCallback((id) => {
+  const clearIdTimers = useCallback((id) => {
     (timers.current.get(id) || []).forEach((timer) => window.clearTimeout(timer));
     timers.current.delete(id);
-  }, []);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(notifications));
-    } catch {
-      // Notifications still work for this session if storage is unavailable.
-    }
-  }, [notifications]);
-
-  useEffect(() => () => {
-    timers.current.forEach((items) => items.forEach((timer) => window.clearTimeout(timer)));
-    timers.current.clear();
   }, []);
 
   const finishToast = useCallback((id) => {
@@ -57,16 +84,16 @@ export function useNotifications() {
   }, []);
 
   const dismiss = useCallback((id) => {
-    clearTimers(id);
-    setNotifications((current) => current.filter((item) => item.id !== id));
+    clearIdTimers(id);
+    updateNotifications((items) => items.filter((item) => item.id !== id));
     finishToast(id);
-  }, [clearTimers, finishToast]);
+  }, [clearIdTimers, finishToast, updateNotifications]);
 
   const markAllRead = useCallback(() => {
-    setNotifications((current) => current.map((item) => (
+    updateNotifications((items) => items.map((item) => (
       item.read ? item : { ...item, read: true }
     )));
-  }, []);
+  }, [updateNotifications]);
 
   const notify = useCallback(({ title, message, kind = 'info' }) => {
     const id = typeof crypto !== 'undefined' && crypto.randomUUID
@@ -80,7 +107,7 @@ export function useNotifications() {
       read: false,
       created_at: new Date().toISOString(),
     };
-    setNotifications((current) => [item, ...current].slice(0, MAX_NOTIFICATIONS));
+    updateNotifications((items) => [item, ...items].slice(0, MAX_NOTIFICATIONS));
     setToastIds((current) => [id, ...current].slice(0, MAX_TOASTS));
 
     storeTimer(id, window.setTimeout(() => {
@@ -91,7 +118,7 @@ export function useNotifications() {
     }, NOTIFICATION_VISIBLE_MS));
 
     return id;
-  }, [finishToast, storeTimer]);
+  }, [finishToast, storeTimer, updateNotifications]);
 
   return {
     notifications,

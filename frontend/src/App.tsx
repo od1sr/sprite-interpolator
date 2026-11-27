@@ -40,6 +40,17 @@ import './App.css';
 type View = 'landing' | 'auth' | 'dashboard' | 'new' | 'projects' | 'settings';
 type Theme = 'light' | 'dark';
 
+const notifyDoneKey = (userId: string | null) => `zarya.notify.done${userId ? `.${userId}` : ''}`;
+
+function loadNotifyDone(userId: string | null) {
+  if (!userId) return true;
+  try {
+    return window.localStorage.getItem(notifyDoneKey(userId)) !== '0';
+  } catch {
+    return true;
+  }
+}
+
 interface ExportProfile {
   id: string;
   platform: string;
@@ -331,18 +342,21 @@ function TaskRow({
 
 export default function App() {
   const { user, isLoading, login, register, logout, buyPlan, refreshUser, getPlan, updateProfile } = useAuth();
-  const { notifications, toastIds, leavingIds, notify, dismiss, markAllRead, finishToast } = useNotifications();
-  const [notifyDone, setNotifyDone] = useState(() => {
-    try {
-      return window.localStorage.getItem('zarya.notify.done') !== '0';
-    } catch {
-      return true;
-    }
-  });
+  const currentUserId = user ? (user as User).id : null;
+  const { notifications, toastIds, leavingIds, notify, dismiss, markAllRead, finishToast } = useNotifications(currentUserId);
+  const [notifyDoneState, setNotifyDoneState] = useState(() => ({
+    userId: currentUserId,
+    value: loadNotifyDone(currentUserId),
+  }));
+  const notifyDone = notifyDoneState.value;
+  const setNotifyDone = (value: boolean | ((current: boolean) => boolean)) => {
+    setNotifyDoneState((current) => (current.userId === currentUserId
+      ? { ...current, value: typeof value === 'function' ? value(current.value) : value }
+      : current));
+  };
   const notifiedJobs = useRef(new Set<string>());
   const pendingExportJobs = useRef(new Set<string>());
   const notifiedExportJobs = useRef(new Set<string>());
-  const currentUserId = user ? (user as User).id : null;
   const tokenBalance = user ? (user as User).token_balance : 0;
   const [view, setView] = useState<View>('landing');
   const [theme, setTheme] = useState<Theme>(() => {
@@ -412,12 +426,17 @@ export default function App() {
   };
 
   useEffect(() => {
+    setNotifyDoneState({ userId: currentUserId, value: loadNotifyDone(currentUserId) });
+  }, [currentUserId]);
+
+  useEffect(() => {
+    if (!currentUserId || notifyDoneState.userId !== currentUserId) return;
     try {
-      window.localStorage.setItem('zarya.notify.done', notifyDone ? '1' : '0');
+      window.localStorage.setItem(notifyDoneKey(currentUserId), notifyDoneState.value ? '1' : '0');
     } catch {
       // The toggle still works for this session if storage is unavailable.
     }
-  }, [notifyDone]);
+  }, [currentUserId, notifyDoneState]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -915,12 +934,35 @@ export default function App() {
     </>
   );
 
+  const handleBuyPlan = async (plan: string) => {
+    try {
+      const updated = await buyPlan(plan);
+      const label = plan
+        .split('_')
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+      notify({
+        kind: 'success',
+        title: 'Тариф активирован',
+        message: `${label}: токены начислены. Доступно ${updated.token_balance}.`,
+      });
+      return updated;
+    } catch (requestError) {
+      notify({
+        kind: 'danger',
+        title: 'Не удалось купить тариф',
+        message: getErrorMessage(requestError, 'Попробуйте ещё раз.'),
+      });
+      throw requestError;
+    }
+  };
+
   const renderDashboard = () => (
     <Dashboard
       user={user}
       projects={projectsForUi}
       onNewProcess={() => setView('new')}
-      onPlanChange={buyPlan}
+      onPlanChange={handleBuyPlan}
       onOpenProjects={openProjects}
     />
   );
