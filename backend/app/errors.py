@@ -53,8 +53,11 @@ def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(StarletteHTTPException)
     async def handle_http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
         code, message = {
+            401: ("UNAUTHORIZED", "Требуется авторизация"),
+            403: ("FORBIDDEN", "Доступ запрещён"),
             404: ("RESOURCE_NOT_FOUND", "Запрашиваемый ресурс не найден"),
             405: ("METHOD_NOT_ALLOWED", "Метод запроса не поддерживается"),
+            409: ("CONFLICT", "Конфликт состояния ресурса"),
         }.get(exc.status_code, ("HTTP_ERROR", "Не удалось обработать запрос"))
         return error_response(exc.status_code, code, message)
 

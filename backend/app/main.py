@@ -35,6 +35,7 @@ app.add_middleware(
     ],
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 install_error_handlers(app)
 app.include_router(router)

@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from httpx import Request, Response
@@ -9,7 +9,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
-from app.models import ExportJob, Job, Result, Video
+from app.models import ExportJob, Job, Result, User, Video
+from app.storage import user_relative_path
+
+WORKER_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
 @pytest.fixture
@@ -31,14 +34,16 @@ def worker_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     video_id = uuid4()
     job_id = uuid4()
-    source_key = f"uploads/{video_id}.mp4"
+    source_key = user_relative_path(WORKER_USER_ID, "uploads", f"{video_id}.mp4").as_posix()
     source_path = root / source_key
     source_path.parent.mkdir(parents=True)
     source_path.write_bytes(b"source")
     with sessions.begin() as session:
+        session.add(User(id=WORKER_USER_ID, username="worker", password_hash="unused"))
         session.add(
             Video(
                 id=video_id,
+                user_id=WORKER_USER_ID,
                 filename="input.mp4",
                 content_type="video/mp4",
                 size_bytes=6,
@@ -48,6 +53,7 @@ def worker_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         session.add(
             Job(
                 id=job_id,
+                user_id=WORKER_USER_ID,
                 video_id=video_id,
                 status="queued",
                 steps=[
@@ -96,7 +102,9 @@ def test_worker_processes_pipeline_and_persists_result(worker_context, monkeypat
         assert job.result is not None
         result_path = root / job.result.storage_key
         assert result_path.read_bytes() == b"processed"
-        assert (root / "uploads" / f"{job.video_id}.mp4").is_file()
+        assert (
+            root / user_relative_path(WORKER_USER_ID, "uploads", f"{job.video_id}.mp4")
+        ).is_file()
     assert not (root / "jobs" / str(job_id)).exists()
 
 
@@ -237,8 +245,10 @@ def test_worker_stops_after_a_cancellation_during_ai_processing(worker_context, 
         assert job.finished_at is not None
         assert job.steps[0]["status"] == "cancelled"
         assert job.result is None
-    assert not (root / "jobs" / str(job_id)).exists()
-    assert list((root / "cancel").glob(f"{job_id}-*.cancel"))
+    assert not (root / user_relative_path(WORKER_USER_ID, "jobs", str(job_id))).exists()
+    assert list(
+        (root / user_relative_path(WORKER_USER_ID, "cancel")).glob(f"{job_id}-*.cancel")
+    )
 
 
 def test_cancellation_wins_if_ai_fails_after_cancellation_was_requested(worker_context, monkeypatch):
@@ -270,6 +280,7 @@ def test_export_worker_runs_ffmpeg_and_persists_download_path(worker_context, mo
         session.add(
             ExportJob(
                 id=export_id,
+                user_id=WORKER_USER_ID,
                 video_id=video.id,
                 profile_id="tiktok_vertical_v1",
                 config_snapshot=profile,
@@ -291,7 +302,9 @@ def test_export_worker_runs_ffmpeg_and_persists_download_path(worker_context, mo
         export = session.get(ExportJob, export_id)
         assert export.status == "ready"
         assert export.progress == 100
-        assert export.output_path == f"exports/{export_id}/result.mp4"
+        assert export.output_path == user_relative_path(
+            WORKER_USER_ID, "exports", str(export_id), "result.mp4"
+        ).as_posix()
         assert (root / export.output_path).read_bytes() == b"adapted"
 
 
@@ -303,6 +316,7 @@ def test_export_worker_persists_intermediate_progress(worker_context, monkeypatc
         session.add(
             ExportJob(
                 id=export_id,
+                user_id=WORKER_USER_ID,
                 video_id=video.id,
                 profile_id="youtube_standard_v1",
                 config_snapshot={},
@@ -328,7 +342,7 @@ def test_export_worker_persists_intermediate_progress(worker_context, monkeypatc
 def test_export_worker_uses_linked_job_result(worker_context, monkeypatch):
     worker, sessions, root, job_id = worker_context
     export_id = uuid4()
-    result_key = f"results/{job_id}/result.mp4"
+    result_key = user_relative_path(WORKER_USER_ID, "results", str(job_id), "result.mp4").as_posix()
     result_path = root / result_key
     result_path.parent.mkdir(parents=True)
     result_path.write_bytes(b"processed")
@@ -338,6 +352,7 @@ def test_export_worker_uses_linked_job_result(worker_context, monkeypatch):
         session.add(
             Result(
                 id=uuid4(),
+                user_id=WORKER_USER_ID,
                 job_id=job_id,
                 filename="result.mp4",
                 content_type="video/mp4",
@@ -352,6 +367,7 @@ def test_export_worker_uses_linked_job_result(worker_context, monkeypatch):
         session.add(
             ExportJob(
                 id=export_id,
+                user_id=WORKER_USER_ID,
                 video_id=video.id,
                 job_id=job_id,
                 profile_id="youtube_standard_v1",

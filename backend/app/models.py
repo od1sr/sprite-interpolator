@@ -12,11 +12,25 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class Video(Base):
-    __tablename__ = "videos"
-    __table_args__ = (Index("ix_videos_created_at", "created_at"),)
+class User(Base):
+    __tablename__ = "users"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    display_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class Video(Base):
+    __tablename__ = "videos"
+    __table_args__ = (
+        Index("ix_videos_created_at", "created_at"),
+        Index("ix_videos_user_id_created_at", "user_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     filename: Mapped[str] = mapped_column(String(255))
     content_type: Mapped[str] = mapped_column(String(127))
     size_bytes: Mapped[int] = mapped_column(Integer)
@@ -36,9 +50,11 @@ class Job(Base):
         Index("ix_jobs_video_id", "video_id"),
         Index("ix_jobs_status", "status"),
         Index("ix_jobs_created_at", "created_at"),
+        Index("ix_jobs_user_id_created_at", "user_id", "created_at"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     video_id: Mapped[UUID] = mapped_column(ForeignKey("videos.id", ondelete="RESTRICT"))
     status: Mapped[str] = mapped_column(String(16), default="queued")
     steps: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
@@ -60,6 +76,7 @@ class Result(Base):
     __tablename__ = "results"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     job_id: Mapped[UUID] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), unique=True)
     filename: Mapped[str] = mapped_column(String(255))
     content_type: Mapped[str] = mapped_column(String(127))
@@ -75,9 +92,13 @@ class Result(Base):
 
 class ExportJob(Base):
     __tablename__ = "export_jobs"
-    __table_args__ = (Index("ix_export_jobs_job_id", "job_id"),)
+    __table_args__ = (
+        Index("ix_export_jobs_job_id", "job_id"),
+        Index("ix_export_jobs_user_id_created_at", "user_id", "created_at"),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     video_id: Mapped[UUID] = mapped_column(ForeignKey("videos.id", ondelete="CASCADE"))
     job_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("jobs.id", ondelete="CASCADE"), nullable=True

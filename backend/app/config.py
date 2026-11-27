@@ -22,6 +22,11 @@ class Settings:
     allowed_extensions: frozenset[str] = frozenset({".mp4", ".mov", ".webm"})
     ffprobe_path: str = os.getenv("FFPROBE_PATH", "ffprobe")
     ai_timeout_seconds: float = float(os.getenv("AI_TIMEOUT_SECONDS", "3600"))
+    secret_key: str = os.getenv("SECRET_KEY", "dev-only-change-me")
+    jwt_algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")
+    access_token_ttl_minutes: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
+    auth_cookie_name: str = os.getenv("AUTH_COOKIE_NAME", "zarya_access_token")
+    auth_cookie_secure: bool = os.getenv("AUTH_COOKIE_SECURE", "false").lower() == "true"
 
     def __post_init__(self) -> None:
         if not 1 <= self.port <= 65535:
@@ -30,6 +35,8 @@ class Settings:
             raise ValueError("MAX_UPLOAD_BYTES must be a positive integer")
         if self.ai_timeout_seconds <= 0:
             raise ValueError("AI_TIMEOUT_SECONDS must be positive")
+        if self.access_token_ttl_minutes <= 0:
+            raise ValueError("ACCESS_TOKEN_EXPIRE_MINUTES must be positive")
 
 
 settings = Settings()

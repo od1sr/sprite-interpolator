@@ -15,6 +15,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models import ExportJob, Job, Result, Video
 from app.queue import celery_app
+from app.storage import user_relative_path
 
 logger = logging.getLogger(__name__)
 
@@ -229,7 +230,7 @@ def process_job(_: Any, job_id: str) -> None:
         return
 
     source = settings.storage_root / video.storage_key
-    work_dir = settings.storage_root / "jobs" / str(job.id)
+    work_dir = settings.storage_root / user_relative_path(job.user_id, "jobs", str(job.id))
     result_path: Path | None = None
     work_dir.mkdir(parents=True, exist_ok=True)
     try:
@@ -243,7 +244,7 @@ def process_job(_: Any, job_id: str) -> None:
             current.started_at = _now()
             current.message = "Обработка видео"
 
-        cancel_dir = settings.storage_root / "cancel"
+        cancel_dir = settings.storage_root / user_relative_path(job.user_id, "cancel")
         cancel_dir.mkdir(parents=True, exist_ok=True)
         current_input = source
         final_metadata: dict[str, Any] | None = None
@@ -296,7 +297,7 @@ def process_job(_: Any, job_id: str) -> None:
             raise PipelineFailure("INVALID_PARAMETERS", "Задача не содержит этапов обработки", False, None)
         result_id = uuid4()
         result_filename = f"{Path(video.filename).stem}_processed.mp4"
-        result_relative = Path("results") / str(job.id) / result_filename
+        result_relative = user_relative_path(job.user_id, "results", str(job.id), result_filename)
         _raise_if_cancelled(parsed_id)
         result_path = settings.storage_root / result_relative
         result_path.parent.mkdir(parents=True, exist_ok=True)
@@ -310,6 +311,7 @@ def process_job(_: Any, job_id: str) -> None:
                 raise JobCancelled
             result = Result(
                 id=result_id,
+                user_id=job.user_id,
                 job_id=parsed_id,
                 filename=result_filename,
                 content_type="video/mp4",
@@ -416,7 +418,7 @@ def process_export_job(_: Any, export_job_id: str) -> None:
             duration_seconds = result.duration_seconds or duration_seconds
             input_path = result_path
 
-        output_dir = settings.storage_root / "exports" / str(job.id)
+        output_dir = settings.storage_root / user_relative_path(job.user_id, "exports", str(job.id))
         output_path = output_dir / "result.mp4"
 
         def report_progress(percent: float) -> None:
@@ -455,7 +457,7 @@ def process_export_job(_: Any, export_job_id: str) -> None:
                 return
             job.status = "ready"
             job.progress = 100
-            job.output_path = f"exports/{job.id}/result.mp4"
+            job.output_path = user_relative_path(job.user_id, "exports", str(job.id), "result.mp4").as_posix()
             job.finished_at = _now()
             session.commit()
 

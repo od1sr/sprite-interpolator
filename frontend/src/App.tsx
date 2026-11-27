@@ -294,6 +294,31 @@ export default function App() {
   const [clock, setClock] = useState(() => Date.now());
   const uploadSequence = useRef(0);
 
+  const resetWorkspace = () => {
+    uploadSequence.current += 1;
+    setFile(null);
+    setVideo(null);
+    setJob(null);
+    setProjects([]);
+    setError(null);
+    setProcessing(false);
+    setUploading(false);
+    setScale(2);
+    setFps(0);
+    setColorPreset('');
+    setSmartColor(false);
+    setSharpness(0);
+  };
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      resetWorkspace();
+      setView('auth');
+    };
+    window.addEventListener('zarya:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('zarya:unauthorized', handleUnauthorized);
+  }, []);
+
   const selectedProfiles = EXPORT_PROFILES.filter((profile) => profileIds.includes(profile.id));
   const hasPipelineSteps = scale > 1 || fps > 0 || smartColor || Boolean(colorPreset) || sharpness > 0;
 
@@ -686,12 +711,14 @@ export default function App() {
         <Auth
           mode={authMode}
           setMode={setAuthMode}
-          onLogin={(email: string, name: string) => {
-            login(email, name);
+          onLogin={async (loginName: string, password: string) => {
+            await login(loginName, password);
+            resetWorkspace();
             setView('dashboard');
           }}
-          onRegister={(name: string, email: string) => {
-            register(name, email);
+          onRegister={async (loginName: string, password: string, displayName: string) => {
+            await register(loginName, password, displayName);
+            resetWorkspace();
             setView('dashboard');
           }}
           onBack={() => setView('landing')}
@@ -705,8 +732,9 @@ export default function App() {
     }} />;
   }
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    resetWorkspace();
+    await logout();
     setView('landing');
   };
 

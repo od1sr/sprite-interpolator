@@ -1,7 +1,7 @@
 import React from 'react';
 
 export default function Dashboard({ user, projects, onNewProcess }) {
-  const firstName = user?.name?.split(' ')[0] || 'Пользователь';
+  const firstName = (user?.display_name || user?.username || 'Пользователь').split(' ')[0];
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Доброе утро' : hour < 18 ? 'Добрый день' : 'Добрый вечер';
   const activeCount = projects.filter(project => project.status === 'run' || project.status === 'queue').length;

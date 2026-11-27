@@ -4,7 +4,8 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy import select
 
-from app.models import ExportJob, Job, Result, Video
+from app.models import ExportJob, Job, Result, User, Video
+from app.storage import user_relative_path
 
 
 def upload(client, monkeypatch):
@@ -355,13 +356,14 @@ def test_cancel_queued_job_and_reject_active_video_deletion(client, monkeypatch)
     assert test_client.delete(f"/api/v1/videos/{video['id']}").status_code == 409
 
 
-def test_retry_creates_a_new_job_for_retryable_failure(client, monkeypatch):
+def test_retry_creates_a_new_job_for_retryable_failure(client, monkeypatch, user):
     test_client, sessions = client
     video = upload(test_client, monkeypatch).json()
     from app import api
 
     with sessions.begin() as session:
         failed = Job(
+            user_id=user.id,
             video_id=UUID(video["id"]),
             status="failed",
             steps=[
@@ -392,24 +394,32 @@ def test_retry_creates_a_new_job_for_retryable_failure(client, monkeypatch):
     assert enqueued == [[retry["id"]]]
 
 
-def test_completed_job_without_file_returns_resource_gone(client):
+def test_completed_job_without_file_returns_resource_gone(client, user):
     test_client, sessions = client
     with sessions.begin() as session:
         video = Video(
+            user_id=user.id,
             filename="source.mp4",
             content_type="video/mp4",
             size_bytes=10,
-            storage_key="uploads/source.mp4",
+            storage_key=user_relative_path(user.id, "uploads", "source.mp4").as_posix(),
         )
-        job = Job(video=video, status="completed", steps=[], progress=100)
+        job = Job(
+            user_id=user.id,
+            video=video,
+            status="completed",
+            steps=[],
+            progress=100,
+        )
         session.add_all([video, job])
         session.flush()
         result = Result(
+            user_id=user.id,
             job_id=job.id,
             filename="render.mp4",
             content_type="video/mp4",
             size_bytes=1,
-            storage_key=f"results/{job.id}/render.mp4",
+            storage_key=user_relative_path(user.id, "results", str(job.id), "render.mp4").as_posix(),
         )
         session.add(result)
         session.flush()
@@ -421,24 +431,32 @@ def test_completed_job_without_file_returns_resource_gone(client):
     assert response.json()["error"]["code"] == "RESOURCE_GONE"
 
 
-def test_deleting_terminal_job_removes_its_result_and_database_rows(client):
+def test_deleting_terminal_job_removes_its_result_and_database_rows(client, user):
     test_client, sessions = client
     with sessions.begin() as session:
         video = Video(
+            user_id=user.id,
             filename="source.mp4",
             content_type="video/mp4",
             size_bytes=10,
-            storage_key="uploads/source.mp4",
+            storage_key=user_relative_path(user.id, "uploads", "source.mp4").as_posix(),
         )
-        job = Job(video=video, status="completed", steps=[], progress=100)
+        job = Job(
+            user_id=user.id,
+            video=video,
+            status="completed",
+            steps=[],
+            progress=100,
+        )
         session.add_all([video, job])
         session.flush()
         result = Result(
+            user_id=user.id,
             job_id=job.id,
             filename="render.mp4",
             content_type="video/mp4",
             size_bytes=7,
-            storage_key=f"results/{job.id}/render.mp4",
+            storage_key=user_relative_path(user.id, "results", str(job.id), "render.mp4").as_posix(),
         )
         session.add(result)
         session.flush()
@@ -447,8 +465,10 @@ def test_deleting_terminal_job_removes_its_result_and_database_rows(client):
 
     from app import api
 
-    result_path = api.settings.storage_root / "results" / str(job_id) / "render.mp4"
-    result_path.parent.mkdir(parents=True)
+    result_path = api.settings.storage_root / user_relative_path(
+        user.id, "results", str(job_id), "render.mp4"
+    )
+    result_path.parent.mkdir(parents=True, exist_ok=True)
     result_path.write_bytes(b"render!")
     response = test_client.delete(f"/api/v1/jobs/{job_id}")
     assert response.status_code == 204
@@ -458,16 +478,18 @@ def test_deleting_terminal_job_removes_its_result_and_database_rows(client):
         assert session.scalar(select(Result)) is None
 
 
-def test_result_metadata_and_download(client):
+def test_result_metadata_and_download(client, user):
     test_client, sessions = client
     with sessions.begin() as session:
         video = Video(
+            user_id=user.id,
             filename="source.mp4",
             content_type="video/mp4",
             size_bytes=10,
-            storage_key="uploads/source.mp4",
+            storage_key=user_relative_path(user.id, "uploads", "source.mp4").as_posix(),
         )
         job = Job(
+            user_id=user.id,
             video=video,
             status="completed",
             steps=[],
@@ -476,11 +498,12 @@ def test_result_metadata_and_download(client):
         session.add_all([video, job])
         session.flush()
         result = Result(
+            user_id=user.id,
             job_id=job.id,
             filename="render.mp4",
             content_type="video/mp4",
             size_bytes=7,
-            storage_key=f"results/{job.id}/render.mp4",
+            storage_key=user_relative_path(user.id, "results", str(job.id), "render.mp4").as_posix(),
         )
         session.add(result)
         session.flush()
@@ -489,8 +512,10 @@ def test_result_metadata_and_download(client):
 
     from app import api
 
-    result_path = api.settings.storage_root / "results" / str(job_id) / "render.mp4"
-    result_path.parent.mkdir(parents=True)
+    result_path = api.settings.storage_root / user_relative_path(
+        user.id, "results", str(job_id), "render.mp4"
+    )
+    result_path.parent.mkdir(parents=True, exist_ok=True)
     result_path.write_bytes(b"render!")
     metadata = test_client.get(f"/api/v1/jobs/{job_id}/result")
     assert metadata.status_code == 200
@@ -581,21 +606,23 @@ def test_export_queue_failure_does_not_leave_a_queued_record(client, monkeypatch
         assert session.scalar(select(ExportJob)) is None
 
 
-def test_export_download_requires_ready_job_and_serves_output(client):
+def test_export_download_requires_ready_job_and_serves_output(client, user):
     test_client, sessions = client
     from app import api
 
-    output_key = "exports/test/result.mp4"
+    output_key = user_relative_path(user.id, "exports", "test", "result.mp4").as_posix()
     with sessions.begin() as session:
         video = Video(
+            user_id=user.id,
             filename="source.mp4",
             content_type="video/mp4",
             size_bytes=10,
-            storage_key="uploads/source.mp4",
+            storage_key=user_relative_path(user.id, "uploads", "source.mp4").as_posix(),
         )
         session.add(video)
         session.flush()
         export = ExportJob(
+            user_id=user.id,
             video_id=video.id,
             profile_id="youtube_standard_v1",
             config_snapshot={},
@@ -610,7 +637,7 @@ def test_export_download_requires_ready_job_and_serves_output(client):
     assert not_ready.status_code == 409
 
     output_path = api.settings.storage_root / output_key
-    output_path.parent.mkdir(parents=True)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_bytes(b"rendered")
     with sessions.begin() as session:
         export = session.get(ExportJob, export_id)
@@ -655,3 +682,88 @@ def test_list_jobs_returns_projects_with_nested_exports(client, monkeypatch):
     assert [item["id"] for item in second_project["exports"]] == [export["id"]]
     first_project = next(item for item in projects["items"] if item["id"] == first["id"])
     assert first_project["exports"] == []
+
+
+def test_register_login_me_and_duplicate_username(client):
+    test_client, sessions = client
+    from app import api
+
+    test_client.cookies.clear()
+    assert test_client.get("/api/v1/auth/me").status_code == 401
+
+    registered = test_client.post(
+        "/api/v1/auth/register",
+        json={"username": "NewUser", "password": "password123", "display_name": "New"},
+    )
+    assert registered.status_code == 201
+    assert registered.json()["username"] == "newuser"
+    assert "password" not in registered.json()
+    assert test_client.get("/api/v1/auth/me").json()["username"] == "newuser"
+
+    duplicate = test_client.post(
+        "/api/v1/auth/register",
+        json={"username": "newuser", "password": "password123"},
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["error"]["code"] == "USERNAME_TAKEN"
+
+    with sessions() as session:
+        stored_hash = session.scalar(
+            select(User).where(User.username == "newuser")
+        ).password_hash
+    assert stored_hash != "password123"
+
+    test_client.post("/api/v1/auth/logout")
+    assert test_client.get("/api/v1/auth/me").status_code == 401
+    assert test_client.post(
+        "/api/v1/auth/login", json={"username": "newuser", "password": "wrong"}
+    ).status_code == 401
+    logged_in = test_client.post(
+        "/api/v1/auth/login", json={"username": "newuser", "password": "password123"}
+    )
+    assert logged_in.status_code == 200
+    assert test_client.get("/api/v1/auth/me").status_code == 200
+
+
+def test_users_cannot_see_or_use_another_users_resources(client, monkeypatch, user):
+    test_client, sessions = client
+    from app import api
+    from app.auth import create_access_token, hash_password
+    from app.models import User
+
+    video_id = upload(test_client, monkeypatch).json()["id"]
+    monkeypatch.setattr(api.process_job, "apply_async", lambda args: None)
+    job_id = test_client.post(
+        "/api/v1/jobs",
+        json={"video_id": video_id, "steps": [{"type": "upscale", "parameters": {"scale": 2}}]},
+    ).json()["id"]
+    export_id = test_client.post(
+        f"/api/v1/videos/{video_id}/exports",
+        json={"profile_id": "youtube_standard_v1", "adaptation_mode": "crop"},
+    ).json()["id"]
+
+    with sessions.begin() as session:
+        other = User(username="other", password_hash=hash_password("password123"))
+        session.add(other)
+        session.flush()
+        other_id = other.id
+
+    test_client.cookies.set(api.settings.auth_cookie_name, create_access_token(other_id))
+    assert test_client.get("/api/v1/videos").json()["total"] == 0
+    assert test_client.get("/api/v1/jobs").json()["total"] == 0
+    assert test_client.get(f"/api/v1/videos/{video_id}").status_code == 404
+    assert test_client.get(f"/api/v1/jobs/{job_id}").status_code == 404
+    assert test_client.get(f"/api/v1/exports/{export_id}").status_code == 404
+    assert test_client.get(f"/api/v1/exports/{export_id}/download").status_code == 404
+    assert test_client.post(
+        "/api/v1/jobs",
+        json={"video_id": video_id, "steps": [{"type": "upscale", "parameters": {"scale": 2}}]},
+    ).status_code == 404
+    assert test_client.post(
+        f"/api/v1/videos/{video_id}/exports",
+        json={"profile_id": "youtube_standard_v1", "adaptation_mode": "crop"},
+    ).status_code == 404
+
+    test_client.cookies.set(api.settings.auth_cookie_name, create_access_token(user.id))
+    assert test_client.get("/api/v1/videos").json()["total"] == 1
+    assert test_client.get("/api/v1/jobs").json()["total"] == 1

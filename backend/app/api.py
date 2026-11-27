@@ -16,10 +16,17 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.auth import (
+    clear_auth_cookie,
+    get_current_user,
+    hash_password,
+    set_auth_cookie,
+    verify_password,
+)
 from app.database import get_session
 from app.errors import APIError
 from app.media import probe_video
-from app.models import ExportJob, Job, Result, Video
+from app.models import ExportJob, Job, Result, User, Video
 from app.queue import celery_app
 from app.schemas import (
     ExportJobCreate,
@@ -27,11 +34,15 @@ from app.schemas import (
     ExportJobResponse,
     JobCreate,
     JobResponse,
+    LoginIn,
     ProjectPage,
+    RegisterIn,
     ResultResponse,
+    UserOut,
     VideoPage,
     VideoResponse,
 )
+from app.storage import user_directory, user_relative_path
 from app.worker import process_export_job, process_job
 
 logger = logging.getLogger(__name__)
@@ -70,27 +81,27 @@ def _validate_interpolate_steps(video: Video, steps: list) -> None:
             )
 
 
-def _video_path(video: Video) -> Path:
-    path = (settings.storage_root / video.storage_key).resolve()
-    if not path.is_relative_to(settings.storage_root.resolve()):
+def _owned_storage_path(storage_key: str, user_id: UUID) -> Path:
+    root = settings.storage_root.resolve()
+    prefix = root / "users" / str(user_id)
+    path = (root / storage_key).resolve()
+    if not path.is_relative_to(prefix):
         raise APIError(500, "INTERNAL_ERROR", "Не удалось получить файл из хранилища")
     return path
+
+
+def _video_path(video: Video) -> Path:
+    return _owned_storage_path(video.storage_key, video.user_id)
 
 
 def _result_path(result: Result) -> Path:
-    path = (settings.storage_root / result.storage_key).resolve()
-    if not path.is_relative_to(settings.storage_root.resolve()):
-        raise APIError(500, "INTERNAL_ERROR", "Не удалось получить файл из хранилища")
-    return path
+    return _owned_storage_path(result.storage_key, result.user_id)
 
 
 def _export_path(job: ExportJob) -> Path:
     if not job.output_path:
         raise APIError(410, "RESOURCE_GONE", "Файл экспорта больше недоступен")
-    path = (settings.storage_root / job.output_path).resolve()
-    if not path.is_relative_to(settings.storage_root.resolve()):
-        raise APIError(500, "INTERNAL_ERROR", "Не удалось получить файл из хранилища")
-    return path
+    return _owned_storage_path(job.output_path, job.user_id)
 
 
 def _stage_path_for_deletion(path: Path) -> Path | None:
@@ -141,9 +152,40 @@ def _raise_not_found(resource: str) -> None:
     )
 
 
-def _new_job(video_id: UUID, steps: list[dict], message: str) -> Job:
+def _get_owned_video(session: Session, video_id: UUID, user: User, *, lock: bool = False) -> Video:
+    query = select(Video).where(Video.id == video_id, Video.user_id == user.id)
+    if lock:
+        query = query.with_for_update()
+    video = session.scalar(query)
+    if video is None:
+        _raise_not_found("video")
+    return video
+
+
+def _get_owned_job(session: Session, job_id: UUID, user: User, *, lock: bool = False) -> Job:
+    query = select(Job).where(Job.id == job_id, Job.user_id == user.id)
+    if lock:
+        query = query.with_for_update()
+    job = session.scalar(query)
+    if job is None:
+        _raise_not_found("job")
+    return job
+
+
+def _get_owned_export(session: Session, export_id: UUID, user: User, *, lock: bool = False) -> ExportJob:
+    query = select(ExportJob).where(ExportJob.id == export_id, ExportJob.user_id == user.id)
+    if lock:
+        query = query.with_for_update()
+    export = session.scalar(query)
+    if export is None:
+        _raise_not_found("export_job")
+    return export
+
+
+def _new_job(video_id: UUID, user_id: UUID, steps: list[dict], message: str) -> Job:
     return Job(
         video_id=video_id,
+        user_id=user_id,
         status="queued",
         steps=[
             {
@@ -183,8 +225,55 @@ def _enqueue_export_job(session: Session, job: ExportJob) -> None:
         raise APIError(503, "SERVICE_UNAVAILABLE", "Очередь задач временно недоступна") from exc
 
 
+@router.post("/auth/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+def register(payload: RegisterIn, response: Response, session: Session = Depends(get_session)) -> User:
+    username = payload.username.strip().lower()
+    if session.scalar(select(User.id).where(User.username == username)) is not None:
+        raise APIError(409, "USERNAME_TAKEN", "Этот логин уже занят", {"username": username})
+    user = User(
+        username=username,
+        password_hash=hash_password(payload.password),
+        display_name=(payload.display_name or "").strip() or None,
+    )
+    session.add(user)
+    try:
+        session.commit()
+        session.refresh(user)
+    except SQLAlchemyError as exc:
+        session.rollback()
+        raise APIError(409, "USERNAME_TAKEN", "Этот логин уже занят", {"username": username}) from exc
+    set_auth_cookie(response, user.id)
+    return user
+
+
+@router.post("/auth/login", response_model=UserOut)
+def login(payload: LoginIn, response: Response, session: Session = Depends(get_session)) -> User:
+    username = payload.username.strip().lower()
+    user = session.scalar(select(User).where(User.username == username))
+    if user is None or not verify_password(payload.password, user.password_hash):
+        raise APIError(401, "UNAUTHORIZED", "Неверный логин или пароль")
+    set_auth_cookie(response, user.id)
+    return user
+
+
+@router.get("/auth/me", response_model=UserOut)
+def me(user: User = Depends(get_current_user)) -> User:
+    return user
+
+
+@router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(response: Response) -> Response:
+    clear_auth_cookie(response)
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
+
+
 @router.post("/videos", response_model=VideoResponse, status_code=status.HTTP_201_CREATED)
-async def upload_video(file: UploadFile = File(...), session: Session = Depends(get_session)) -> Video:
+async def upload_video(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> Video:
     original_name = (file.filename or "video").replace("\\", "/").rsplit("/", 1)[-1].strip()
     extension = Path(original_name).suffix.lower()
     if extension not in settings.allowed_extensions:
@@ -197,10 +286,9 @@ async def upload_video(file: UploadFile = File(...), session: Session = Depends(
     if not original_name or original_name in {".", ".."}:
         raise APIError(422, "VALIDATION_ERROR", "Не удалось определить имя файла")
 
-    upload_dir = settings.storage_root / "uploads"
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    upload_dir = user_directory(settings.storage_root, user.id, "uploads")
     video_id = uuid4()
-    relative_path = Path("uploads") / f"{video_id}{extension}"
+    relative_path = user_relative_path(user.id, "uploads", f"{video_id}{extension}")
     destination = settings.storage_root / relative_path
     size_bytes = 0
     stored = False
@@ -226,6 +314,7 @@ async def upload_video(file: UploadFile = File(...), session: Session = Depends(
         }[extension]
         video = Video(
             id=video_id,
+            user_id=user.id,
             filename=original_name[:255],
             content_type=content_type,
             size_bytes=size_bytes,
@@ -256,33 +345,40 @@ async def upload_video(file: UploadFile = File(...), session: Session = Depends(
 def list_videos(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> dict:
-    total = session.scalar(select(func.count()).select_from(Video)) or 0
+    total = session.scalar(
+        select(func.count()).select_from(Video).where(Video.user_id == user.id)
+    ) or 0
     items = session.scalars(
-        select(Video).order_by(Video.created_at.desc(), Video.id).limit(limit).offset(offset)
+        select(Video)
+        .where(Video.user_id == user.id)
+        .order_by(Video.created_at.desc(), Video.id)
+        .limit(limit)
+        .offset(offset)
     ).all()
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 @router.get("/videos/{video_id}", response_model=VideoResponse)
-def get_video(video_id: UUID, session: Session = Depends(get_session)) -> Video:
-    video = session.get(Video, video_id)
-    if video is None:
-        _raise_not_found("video")
-    return video
+def get_video(
+    video_id: UUID,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> Video:
+    return _get_owned_video(session, video_id, user)
 
 
 @router.post("/videos/{video_id}/color-preview")
 def color_preview(
     video_id: UUID,
     payload: ColorPreviewRequest,
+    user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> dict:
     """Proxy a single-frame before/after preview to the AI service."""
-    video = session.get(Video, video_id)
-    if video is None:
-        _raise_not_found("video")
+    video = _get_owned_video(session, video_id, user)
     source = _video_path(video)
     if not source.is_file():
         raise APIError(409, "INVALID_STATE", "Исходный файл больше недоступен")
@@ -324,10 +420,12 @@ def color_preview(
 
 
 @router.delete("/videos/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_video(video_id: UUID, session: Session = Depends(get_session)) -> Response:
-    video = session.scalar(select(Video).where(Video.id == video_id).with_for_update())
-    if video is None:
-        _raise_not_found("video")
+def delete_video(
+    video_id: UUID,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    video = _get_owned_video(session, video_id, user, lock=True)
     active_status = session.scalar(
         select(Job.status).where(Job.video_id == video_id, Job.status.in_(ACTIVE_STATUSES)).limit(1)
     )
@@ -365,14 +463,21 @@ def delete_video(video_id: UUID, session: Session = Depends(get_session)) -> Res
 
 
 @router.post("/jobs", response_model=JobResponse, status_code=status.HTTP_202_ACCEPTED)
-def create_job(payload: JobCreate, session: Session = Depends(get_session)) -> Job:
-    video = session.scalar(select(Video).where(Video.id == payload.video_id).with_for_update())
-    if video is None:
-        _raise_not_found("video")
+def create_job(
+    payload: JobCreate,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> Job:
+    video = _get_owned_video(session, payload.video_id, user, lock=True)
     if not _video_path(video).is_file():
         raise APIError(409, "INVALID_STATE", "Исходный файл больше недоступен")
     _validate_interpolate_steps(video, payload.steps)
-    job = _new_job(payload.video_id, [step.model_dump() for step in payload.steps], "Задача добавлена в очередь")
+    job = _new_job(
+        payload.video_id,
+        user.id,
+        [step.model_dump() for step in payload.steps],
+        "Задача добавлена в очередь",
+    )
     session.add(job)
     session.commit()
     session.refresh(job)
@@ -384,11 +489,18 @@ def create_job(payload: JobCreate, session: Session = Depends(get_session)) -> J
 def list_jobs(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> dict:
-    total = session.scalar(select(func.count()).select_from(Job)) or 0
+    total = session.scalar(
+        select(func.count()).select_from(Job).where(Job.user_id == user.id)
+    ) or 0
     jobs = session.scalars(
-        select(Job).order_by(Job.created_at.desc(), Job.id).limit(limit).offset(offset)
+        select(Job)
+        .where(Job.user_id == user.id)
+        .order_by(Job.created_at.desc(), Job.id)
+        .limit(limit)
+        .offset(offset)
     ).all()
     if not jobs:
         return {"items": [], "total": total, "limit": limit, "offset": offset}
@@ -397,16 +509,20 @@ def list_jobs(
     video_ids = {job.video_id for job in jobs}
     videos = {
         video.id: video
-        for video in session.scalars(select(Video).where(Video.id.in_(video_ids))).all()
+        for video in session.scalars(
+            select(Video).where(Video.id.in_(video_ids), Video.user_id == user.id)
+        ).all()
     }
     results = {
         result.job_id: result
-        for result in session.scalars(select(Result).where(Result.job_id.in_(job_ids))).all()
+        for result in session.scalars(
+            select(Result).where(Result.job_id.in_(job_ids), Result.user_id == user.id)
+        ).all()
     }
     exports_by_job: dict = defaultdict(list)
     exports = session.scalars(
         select(ExportJob)
-        .where(ExportJob.job_id.in_(job_ids))
+        .where(ExportJob.job_id.in_(job_ids), ExportJob.user_id == user.id)
         .order_by(ExportJob.created_at.desc(), ExportJob.id)
     ).all()
     for export in exports:
@@ -437,18 +553,21 @@ def list_jobs(
 
 
 @router.get("/jobs/{job_id}", response_model=JobResponse)
-def get_job(job_id: UUID, session: Session = Depends(get_session)) -> Job:
-    job = session.get(Job, job_id)
-    if job is None:
-        _raise_not_found("job")
-    return job
+def get_job(
+    job_id: UUID,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> Job:
+    return _get_owned_job(session, job_id, user)
 
 
 @router.post("/jobs/{job_id}/cancel", response_model=JobResponse)
-def cancel_job(job_id: UUID, session: Session = Depends(get_session)) -> Job:
-    job = session.scalar(select(Job).where(Job.id == job_id).with_for_update())
-    if job is None:
-        _raise_not_found("job")
+def cancel_job(
+    job_id: UUID,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> Job:
+    job = _get_owned_job(session, job_id, user, lock=True)
     if job.status in {"cancelling", "cancelled"}:
         return job
     if job.status in {"completed", "failed"}:
@@ -473,6 +592,7 @@ def cancel_job(job_id: UUID, session: Session = Depends(get_session)) -> Job:
     exports = session.scalars(
         select(ExportJob).where(
             ExportJob.job_id == job_id,
+            ExportJob.user_id == user.id,
             ExportJob.status.in_({"queued", "analyzing", "processing", "cancelling"}),
         )
     ).all()
@@ -494,10 +614,12 @@ def cancel_job(job_id: UUID, session: Session = Depends(get_session)) -> Job:
 
 
 @router.delete("/jobs/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_job(job_id: UUID, session: Session = Depends(get_session)) -> Response:
-    job = session.scalar(select(Job).where(Job.id == job_id).with_for_update())
-    if job is None:
-        _raise_not_found("job")
+def delete_job(
+    job_id: UUID,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    job = _get_owned_job(session, job_id, user, lock=True)
     if job.status in ACTIVE_STATUSES:
         raise APIError(
             409,
@@ -506,7 +628,7 @@ def delete_job(job_id: UUID, session: Session = Depends(get_session)) -> Respons
             {"status": job.status},
         )
     result_path = _result_path(job.result) if job.result is not None else None
-    work_dir = settings.storage_root / "jobs" / str(job.id)
+    work_dir = settings.storage_root / user_relative_path(job.user_id, "jobs", str(job.id))
     staged_paths: list[tuple[Path, Path | None]] = []
     try:
         if result_path is not None:
@@ -529,10 +651,12 @@ def delete_job(job_id: UUID, session: Session = Depends(get_session)) -> Respons
 
 
 @router.post("/jobs/{job_id}/retry", response_model=JobResponse, status_code=status.HTTP_202_ACCEPTED)
-def retry_job(job_id: UUID, session: Session = Depends(get_session)) -> Job:
-    previous = session.scalar(select(Job).where(Job.id == job_id).with_for_update())
-    if previous is None:
-        _raise_not_found("job")
+def retry_job(
+    job_id: UUID,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> Job:
+    previous = _get_owned_job(session, job_id, user, lock=True)
     if previous.status != "failed" or not (previous.error or {}).get("retryable", False):
         raise APIError(
             409,
@@ -540,12 +664,15 @@ def retry_job(job_id: UUID, session: Session = Depends(get_session)) -> Job:
             "Повтор задачи недоступен в текущем состоянии",
             {"status": previous.status},
         )
-    video = session.scalar(select(Video).where(Video.id == previous.video_id).with_for_update())
-    if video is None:
-        _raise_not_found("video")
+    video = _get_owned_video(session, previous.video_id, user, lock=True)
     if not _video_path(video).is_file():
         raise APIError(409, "INVALID_STATE", "Исходный файл больше недоступен")
-    retry = _new_job(video.id, previous.steps, "Повторная задача добавлена в очередь")
+    retry = _new_job(
+        video.id,
+        user.id,
+        previous.steps,
+        "Повторная задача добавлена в очередь",
+    )
     session.add(retry)
     session.commit()
     session.refresh(retry)
@@ -553,10 +680,8 @@ def retry_job(job_id: UUID, session: Session = Depends(get_session)) -> Job:
     return retry
 
 
-def _get_result_job(job_id: UUID, session: Session) -> Job:
-    job = session.get(Job, job_id)
-    if job is None:
-        _raise_not_found("job")
+def _get_result_job(job_id: UUID, user: User, session: Session) -> Job:
+    job = _get_owned_job(session, job_id, user)
     if job.status != "completed":
         raise APIError(
             409,
@@ -570,8 +695,12 @@ def _get_result_job(job_id: UUID, session: Session) -> Job:
 
 
 @router.get("/jobs/{job_id}/result", response_model=ResultResponse)
-def get_job_result(job_id: UUID, session: Session = Depends(get_session)) -> dict:
-    job = _get_result_job(job_id, session)
+def get_job_result(
+    job_id: UUID,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> dict:
+    job = _get_result_job(job_id, user, session)
     result = job.result
     if not _result_path(result).is_file():
         raise APIError(410, "RESOURCE_GONE", "Результат больше недоступен")
@@ -591,8 +720,12 @@ def get_job_result(job_id: UUID, session: Session = Depends(get_session)) -> dic
 
 
 @router.get("/jobs/{job_id}/result/download")
-def download_job_result(job_id: UUID, session: Session = Depends(get_session)) -> FileResponse:
-    job = _get_result_job(job_id, session)
+def download_job_result(
+    job_id: UUID,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> FileResponse:
+    job = _get_result_job(job_id, user, session)
     result = job.result
     path = _result_path(result)
     if not path.is_file():
@@ -617,18 +750,17 @@ def download_job_result(job_id: UUID, session: Session = Depends(get_session)) -
 def create_export(
     video_id: UUID,
     payload: ExportJobCreate,
+    user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> ExportJob:
-    video = session.get(Video, video_id)
-    if not video:
-        _raise_not_found("video")
+    video = _get_owned_video(session, video_id, user)
     if not _video_path(video).is_file():
         raise APIError(409, "INVALID_STATE", "Исходный файл больше недоступен")
 
     source_job = None
     if payload.job_id is not None:
-        source_job = session.get(Job, payload.job_id)
-        if source_job is None or source_job.video_id != video_id:
+        source_job = _get_owned_job(session, payload.job_id, user)
+        if source_job.video_id != video_id:
             raise APIError(422, "VALIDATION_ERROR", "Задача обработки не найдена для этого видео")
 
     profile = EXPORT_PROFILES.get(payload.profile_id)
@@ -644,6 +776,7 @@ def create_export(
 
     job = ExportJob(
         video_id=video_id,
+        user_id=user.id,
         job_id=payload.job_id,
         profile_id=payload.profile_id,
         config_snapshot=profile,
@@ -669,18 +802,21 @@ def create_export(
 
 
 @router.get("/exports/{export_id}", response_model=ExportJobResponse)
-def get_export(export_id: UUID, session: Session = Depends(get_session)) -> ExportJob:
-    job = session.get(ExportJob, export_id)
-    if not job:
-        _raise_not_found("export_job")
-    return job
+def get_export(
+    export_id: UUID,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> ExportJob:
+    return _get_owned_export(session, export_id, user)
 
 
 @router.get("/exports/{export_id}/download")
-def download_export(export_id: UUID, session: Session = Depends(get_session)) -> FileResponse:
-    job = session.get(ExportJob, export_id)
-    if job is None:
-        _raise_not_found("export_job")
+def download_export(
+    export_id: UUID,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> FileResponse:
+    job = _get_owned_export(session, export_id, user)
     if job.status != "ready":
         raise APIError(409, "INVALID_STATE", "Экспорт ещё не готов", {"status": job.status})
 

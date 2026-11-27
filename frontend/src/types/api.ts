@@ -123,3 +123,21 @@ export interface ProjectPage {
   limit: number;
   offset: number;
 }
+
+export interface User {
+  id: string;
+  username: string;
+  display_name: string | null;
+  created_at: string;
+}
+
+export interface RegisterRequest {
+  username: string;
+  password: string;
+  display_name?: string | null;
+}
+
+export interface LoginRequest {
+  username: string;
+  password: string;
+}

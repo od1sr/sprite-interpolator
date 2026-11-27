@@ -3,51 +3,94 @@ import type {
   CreateJobStep,
   ExportJob,
   Job,
+  LoginRequest,
   ProjectPage,
+  RegisterRequest,
   Result,
+  User,
   Video,
 } from '../types/api';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(status: number, message: string, code?: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let message = `Ошибка запроса (${response.status})`;
+    let code: string | undefined;
     const body = await response.text();
     if (body) {
       try {
         const data = JSON.parse(body);
         message = data?.error?.message || body;
+        code = data?.error?.code;
       } catch {
         message = body;
       }
     }
-    throw new Error(message);
+    throw new ApiError(response.status, message, code);
   }
   if (response.status === 204) return undefined as T;
   return response.json();
 }
 
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    ...init,
+    credentials: 'include',
+  });
+  if (response.status === 401 && !path.startsWith('/auth/')) {
+    window.dispatchEvent(new CustomEvent('zarya:unauthorized'));
+  }
+  return handleResponse<T>(response);
+}
+
+function jsonRequest<T>(path: string, method: string, body: unknown): Promise<T> {
+  return request<T>(path, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function registerUser(payload: RegisterRequest): Promise<User> {
+  return jsonRequest<User>('/auth/register', 'POST', payload);
+}
+
+export async function loginUser(payload: LoginRequest): Promise<User> {
+  return jsonRequest<User>('/auth/login', 'POST', payload);
+}
+
+export function getCurrentUser(): Promise<User> {
+  return request<User>('/auth/me');
+}
+
+export async function logoutUser(): Promise<void> {
+  await request<void>('/auth/logout', { method: 'POST' });
+}
+
 export async function uploadVideo(file: File): Promise<Video> {
   const formData = new FormData();
   formData.append('file', file);
-  const response = await fetch(`${BASE_URL}/videos`, {
-    method: 'POST',
-    body: formData,
-  });
-  return handleResponse<Video>(response);
+  return request<Video>('/videos', { method: 'POST', body: formData });
 }
 
 export async function createJob(
   videoId: string,
   steps: CreateJobStep[],
 ): Promise<Job> {
-  const response = await fetch(`${BASE_URL}/jobs`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ video_id: videoId, steps }),
-  });
-  return handleResponse<Job>(response);
+  return jsonRequest<Job>('/jobs', 'POST', { video_id: videoId, steps });
 }
 
 export async function getColorPreview(
@@ -56,38 +99,27 @@ export async function getColorPreview(
   preset: string | null,
   sharpness: number,
 ): Promise<{ before: string; after: string }> {
-  const response = await fetch(`${BASE_URL}/videos/${videoId}/color-preview`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      mode,
-      preset: mode === 'preset' ? preset : null,
-      sharpness,
-    }),
-  });
-  return handleResponse<{ before: string; after: string }>(response);
+  return jsonRequest<{ before: string; after: string }>(
+    `/videos/${videoId}/color-preview`,
+    'POST',
+    { mode, preset: mode === 'preset' ? preset : null, sharpness },
+  );
 }
 
-export async function getJobStatus(jobId: string): Promise<Job> {
-  const response = await fetch(`${BASE_URL}/jobs/${jobId}`);
-  return handleResponse<Job>(response);
+export function getJobStatus(jobId: string): Promise<Job> {
+  return request<Job>(`/jobs/${jobId}`);
 }
 
-export async function listProjects(): Promise<ProjectPage> {
-  const response = await fetch(`${BASE_URL}/jobs?limit=100`);
-  return handleResponse<ProjectPage>(response);
+export function listProjects(): Promise<ProjectPage> {
+  return request<ProjectPage>('/jobs?limit=100');
 }
 
-export async function cancelJob(jobId: string): Promise<Job> {
-  const response = await fetch(`${BASE_URL}/jobs/${jobId}/cancel`, {
-    method: 'POST',
-  });
-  return handleResponse<Job>(response);
+export function cancelJob(jobId: string): Promise<Job> {
+  return request<Job>(`/jobs/${jobId}/cancel`, { method: 'POST' });
 }
 
-export async function getJobResult(jobId: string): Promise<Result> {
-  const response = await fetch(`${BASE_URL}/jobs/${jobId}/result`);
-  return handleResponse<Result>(response);
+export function getJobResult(jobId: string): Promise<Result> {
+  return request<Result>(`/jobs/${jobId}/result`);
 }
 
 export async function createVideoExport(
@@ -96,21 +128,15 @@ export async function createVideoExport(
   adaptationMode: AdaptationMode,
   jobId?: string,
 ): Promise<ExportJob> {
-  const response = await fetch(`${BASE_URL}/videos/${videoId}/exports`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      profile_id: profileId,
-      adaptation_mode: adaptationMode,
-      job_id: jobId ?? null,
-    }),
+  return jsonRequest<ExportJob>(`/videos/${videoId}/exports`, 'POST', {
+    profile_id: profileId,
+    adaptation_mode: adaptationMode,
+    job_id: jobId ?? null,
   });
-  return handleResponse<ExportJob>(response);
 }
 
-export async function getVideoExport(exportId: string): Promise<ExportJob> {
-  const response = await fetch(`${BASE_URL}/exports/${exportId}`);
-  return handleResponse<ExportJob>(response);
+export function getVideoExport(exportId: string): Promise<ExportJob> {
+  return request<ExportJob>(`/exports/${exportId}`);
 }
 
 export function resolveApiUrl(path: string): string {

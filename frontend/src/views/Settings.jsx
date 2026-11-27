@@ -1,15 +1,17 @@
-import React, { useState } from 'react';
-import PasswordInput from '../components/PasswordInput';
+import React, { useEffect, useState } from 'react';
 
 export default function Settings({ user, onUpdateProfile }) {
-  const [name, setName] = useState(user?.name || '');
-  const [email, setEmail] = useState(user?.email || '');
+  const [displayName, setDisplayName] = useState(user?.display_name || '');
   const [notifyDone, setNotifyDone] = useState(true);
 
-  const handleSave = (e) => {
-    e.preventDefault();
-    onUpdateProfile({ name, email });
-    alert('Профиль успешно обновлен!');
+  useEffect(() => {
+    setDisplayName(user?.display_name || '');
+  }, [user?.id, user?.display_name]);
+
+  const handleSave = (event) => {
+    event.preventDefault();
+    onUpdateProfile({ display_name: displayName.trim() || null });
+    alert('Имя сохранено в этом браузере');
   };
 
   return (
@@ -18,7 +20,7 @@ export default function Settings({ user, onUpdateProfile }) {
         <div>
           <span className="welcome-eyebrow">Аккаунт</span>
           <h2 className="welcome-title">Настройки аккаунта</h2>
-          <p className="welcome-sub">Управляйте профилем, безопасностью и уведомлениями.</p>
+          <p className="welcome-sub">Логин и рабочее пространство привязаны к вашему аккаунту.</p>
         </div>
       </div>
 
@@ -27,31 +29,38 @@ export default function Settings({ user, onUpdateProfile }) {
           <div className="panel">
             <div className="panel-head"><h3>Профиль</h3></div>
             <label className="field">
-              <span>Имя</span>
-              <input type="text" className="select" style={{height: '44px'}} value={name} onChange={e => setName(e.target.value)} required />
+              <span>Логин</span>
+              <input className="select" style={{height: '44px'}} value={user?.username || ''} readOnly />
             </label>
             <label className="field">
-              <span>Email</span>
-              <input type="email" className="select" style={{height: '44px'}} value={email} onChange={e => setEmail(e.target.value)} required />
+              <span>Отображаемое имя</span>
+              <input
+                type="text"
+                className="select"
+                style={{height: '44px'}}
+                value={displayName}
+                onChange={e => setDisplayName(e.target.value)}
+                placeholder="Как к вам обращаться"
+                maxLength={120}
+              />
             </label>
             <button type="submit" className="btn btn-primary">Сохранить</button>
           </div>
 
           <div className="panel">
-            <div className="panel-head"><h3>Пароль</h3></div>
-            <label className="field">
-              <span>Текущий пароль</span>
-              <PasswordInput className="select" style={{height: '44px'}} placeholder="••••••••" autoComplete="current-password" />
-            </label>
-            <label className="field">
-              <span>Новый пароль</span>
-              <PasswordInput className="select" style={{height: '44px'}} placeholder="Минимум 6 символов" autoComplete="new-password" />
-            </label>
-            <label className="field">
-              <span>Подтверждение</span>
-              <PasswordInput className="select" style={{height: '44px'}} placeholder="Повторите пароль" autoComplete="new-password" />
-            </label>
-            <button type="button" className="btn btn-ghost">Изменить пароль</button>
+            <div className="panel-head"><h3>Безопасность</h3></div>
+            <div className="set-row">
+              <div className="set-info">
+                <b>Вход по логину и паролю</b>
+                <span>Пароль хранится на сервере в хешированном виде</span>
+              </div>
+            </div>
+            <div className="set-row">
+              <div className="set-info">
+                <b>Личное рабочее пространство</b>
+                <span>Другие пользователи не видят ваши проекты и файлы</span>
+              </div>
+            </div>
           </div>
         </div>
       </form>
@@ -59,22 +68,10 @@ export default function Settings({ user, onUpdateProfile }) {
       <div className="panel">
         <div className="panel-head"><h3>Уведомления</h3></div>
         <div className="set-row">
-          <div className="set-info"><b>Email-уведомления</b><span>Важные события аккаунта и оплаты</span></div>
-          <label className="switch"><input type="checkbox" defaultChecked /><span></span></label>
-        </div>
-        <div className="set-row">
           <div className="set-info"><b>Завершение обработки</b><span>Сообщать, когда проект готов</span></div>
           <label className="switch">
             <input type="checkbox" checked={notifyDone} onChange={e => setNotifyDone(e.target.checked)} /><span></span>
           </label>
-        </div>
-      </div>
-
-      <div className="panel">
-        <div className="panel-head"><h3>Опасная зона</h3></div>
-        <div className="set-row">
-          <div className="set-info"><b>Удалить аккаунт</b><span>Все проекты и данные будут безвозвратно удалены</span></div>
-          <button className="btn btn-ghost btn-sm" style={{color: 'var(--err)', borderColor: 'rgba(214,69,69,.3)'}}>Удалить</button>
         </div>
       </div>
     </div>

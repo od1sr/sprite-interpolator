@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 
 export default function Sidebar({ currentView, setView, user, getPlan }) {
-  const initials = (user?.name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  const displayName = user?.display_name || user?.username || 'Пользователь';
+  const initials = displayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
   const plan = getPlan();
   const [collapsed, setCollapsed] = useState(() => {
     try {
@@ -67,9 +68,9 @@ export default function Sidebar({ currentView, setView, user, getPlan }) {
         </button>
       ))}
       <div className="side-foot">
-        <div className="user-chip" title={`${user?.name || 'Пользователь'} · Тариф ${plan.name}`}>
+        <div className="user-chip" title={`${displayName} · Тариф ${plan.name}`}>
           <div className="avatar sm">{initials}</div>
-          <div className="uc-info"><b>{user?.name}</b><span>Тариф {plan.name}</span></div>
+          <div className="uc-info"><b>{displayName}</b><span>Тариф {plan.name}</span></div>
           <button
             className={`chip-settings ${currentView === 'settings' ? 'active' : ''}`}
             onClick={() => setView('settings')}
