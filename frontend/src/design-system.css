@@ -849,6 +849,38 @@ ul,ol{margin:0;padding:0;list-style:none}
 .notice{padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);color:var(--muted);font-size:13px;line-height:1.5}
 .notice.warning{border-color:rgba(194,124,14,.24);background:rgba(194,124,14,.07);color:#8a5a0a}
 .pipeline-notice{margin-top:14px}
+
+/* =========================================================
+   TOKEN COST PANEL
+   ========================================================= */
+.cost-head{margin-bottom:16px}
+.cost-panel::before{background:repeating-linear-gradient(to bottom,var(--progress) 0 5px,transparent 5px 13px);opacity:.35}
+.cost-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.cost-cell{
+  min-width:0;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--bg);
+  display:flex;flex-direction:column;gap:4px;
+}
+.cost-cell span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.cost-cell b{
+  font-family:var(--mono);font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.cost-formula{
+  font-family:var(--mono);font-size:11.5px;color:var(--muted);letter-spacing:.01em;
+  padding:10px 12px;border:1px dashed var(--line-2);border-radius:9px;background:var(--surface-2);
+  overflow-wrap:anywhere;
+}
+.cost-lines{margin-top:14px;border-top:1px solid var(--line)}
+.cost-line{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:9px 2px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted);
+}
+.cost-line b{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums}
+.cost-line-total span{color:var(--text);font-weight:600}
+.cost-line-total b{font-size:16px;color:var(--accent)}
+.cost-hint{margin-top:12px;font-size:12px;color:var(--ok)}
+.cost-shortage{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}
+.cost-loading{margin-top:10px;font-size:11px;color:var(--faint);font-family:var(--mono)}
 .format-help{margin-bottom:10px;color:var(--muted);font-size:12.5px}
 .mode-help{margin-top:18px}
 
@@ -1079,6 +1111,8 @@ tbody tr:hover{background:rgba(15,23,42,.025)}
   .stat{padding:16px}
   .stat-val{font-size:24px}
   .profile-options,.mode-options{grid-template-columns:1fr}
+  .cost-grid{grid-template-columns:1fr 1fr}
+  .cost-shortage{flex-direction:column;align-items:flex-start}
 }
 @media (max-width:460px){
   .hero-actions .btn{width:100%}

@@ -11,6 +11,7 @@ from app.exporter import run_ffmpeg_export
 import httpx
 from sqlalchemy import select
 
+from app.billing import refund_export, refund_job
 from app.config import settings
 from app.database import SessionLocal
 from app.models import ExportJob, Job, Result, Video
@@ -85,6 +86,23 @@ def _finish_cancelled(job_id: UUID) -> None:
         job = session.scalar(select(Job).where(Job.id == job_id).with_for_update())
         if job is not None:
             _mark_cancelled(job)
+    _cancel_pending_exports(job_id)
+
+
+def _cancel_pending_exports(job_id: UUID) -> None:
+    """Exports that never started are cancelled and refunded with their job."""
+    with SessionLocal.begin() as session:
+        exports = session.scalars(
+            select(ExportJob).where(
+                ExportJob.job_id == job_id,
+                ExportJob.status == "queued",
+            )
+        ).all()
+        for export in exports:
+            export.status = "cancelled"
+            export.user_message = "Обработка видео не завершилась"
+            export.finished_at = _now()
+            refund_export(session, export)
 
 
 def _raise_if_cancelled(job_id: UUID) -> None:
@@ -112,6 +130,7 @@ def _enqueue_pending_exports(job_id: UUID) -> None:
                 export.error_code = "SERVICE_UNAVAILABLE"
                 export.user_message = "Очередь экспорта недоступна"
                 export.finished_at = _now()
+                refund_export(session, export)
         session.commit()
 
 
@@ -354,6 +373,8 @@ def process_job(_: Any, job_id: str) -> None:
                 current.error = error
                 current.message = exc.message
                 current.finished_at = _now()
+                refund_job(session, current)
+        _cancel_pending_exports(parsed_id)
     except Exception:
         logger.exception("Unexpected processing error for job %s", parsed_id)
         _cleanup_work_dir(work_dir)
@@ -378,6 +399,8 @@ def process_job(_: Any, job_id: str) -> None:
                     steps[current.current_step]["finished_at"] = _now().isoformat().replace("+00:00", "Z")
                     steps[current.current_step]["error"] = error
                     current.steps = steps
+                refund_job(session, current)
+        _cancel_pending_exports(parsed_id)
 
 
 @celery_app.task(name="app.worker.process_export_job", bind=True)
@@ -392,6 +415,7 @@ def process_export_job(_: Any, export_job_id: str) -> None:
         if not video:
             job.status = "failed"
             job.user_message = "Исходное видео не найдено"
+            refund_export(session, job)
             session.commit()
             return
         duration_seconds = video.duration_seconds
@@ -413,6 +437,7 @@ def process_export_job(_: Any, export_job_id: str) -> None:
                 job.error_code = "RESULT_NOT_FOUND"
                 job.user_message = "Обработанное видео недоступно"
                 job.finished_at = _now()
+                refund_export(session, job)
                 session.commit()
                 return
             duration_seconds = result.duration_seconds or duration_seconds
@@ -467,4 +492,5 @@ def process_export_job(_: Any, export_job_id: str) -> None:
             job.error_code = "FFMPEG_ERROR"
             job.user_message = "Не удалось обработать видео"
             job.finished_at = _now()
+            refund_export(session, job)
             session.commit()

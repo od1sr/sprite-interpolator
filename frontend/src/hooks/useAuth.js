@@ -70,6 +70,12 @@ export function useAuth() {
     return current;
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const current = await getCurrentUser();
+    setUser(current);
+    return current;
+  }, []);
+
   const updateProfile = useCallback((patch) => {
     setUser((current) => (current ? { ...current, ...patch } : current));
   }, []);
@@ -79,5 +85,5 @@ export function useAuth() {
     return { ...(PLANS[plan] || PLANS.free), token_balance: user?.token_balance ?? 0 };
   }, [user]);
 
-  return { user, isLoading, login, register, logout, buyPlan, getPlan, updateProfile };
+  return { user, isLoading, login, register, logout, buyPlan, refreshUser, getPlan, updateProfile };
 }

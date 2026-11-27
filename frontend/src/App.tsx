@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ApiError,
   cancelJob,
   createJob,
   createVideoExport,
+  estimateJob,
   getJobResult,
   getJobStatus,
   getVideoExport,
@@ -15,6 +17,7 @@ import type {
   CreateJobStep,
   ExportJob,
   Job,
+  JobEstimate,
   Project,
   User,
   Video,
@@ -152,6 +155,30 @@ const STEP_LABELS: Record<string, string> = {
   color_correct: 'Коррекция цвета',
 };
 
+function buildJobSteps(
+  scale: number,
+  fps: number,
+  colorPreset: string,
+  smartColor: boolean,
+  sharpness: number,
+): CreateJobStep[] {
+  const steps: CreateJobStep[] = [];
+  // Interpolate first at the source resolution, then upscale and correct color.
+  if (fps > 0) steps.push({ type: 'interpolate', parameters: { target_fps: Number(fps) } });
+  if (scale > 1) steps.push({ type: 'upscale', parameters: { scale: Number(scale) } });
+  // Color correction is always the last step of the pipeline.
+  if (smartColor || colorPreset || sharpness > 0) {
+    const colorParameters: Record<string, number | string> = smartColor
+      ? { mode: 'smart' }
+      : colorPreset
+        ? { mode: 'preset', preset: colorPreset }
+        : { mode: 'preset' };
+    if (sharpness > 0) colorParameters.sharpness = Number(sharpness);
+    steps.push({ type: 'color_correct', parameters: colorParameters });
+  }
+  return steps;
+}
+
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
@@ -274,7 +301,7 @@ function TaskRow({
 }
 
 export default function App() {
-  const { user, isLoading, login, register, logout, buyPlan, getPlan, updateProfile } = useAuth();
+  const { user, isLoading, login, register, logout, buyPlan, refreshUser, getPlan, updateProfile } = useAuth();
   const currentUserId = user ? (user as User).id : null;
   const tokenBalance = user ? (user as User).token_balance : 0;
   const [view, setView] = useState<View>('landing');
@@ -294,6 +321,9 @@ export default function App() {
   const [processing, setProcessing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [estimate, setEstimate] = useState<JobEstimate | null>(null);
+  const [estimateLoading, setEstimateLoading] = useState(false);
+  const [estimateError, setEstimateError] = useState<string | null>(null);
   const [clock, setClock] = useState(() => Date.now());
   const uploadSequence = useRef(0);
 
@@ -304,6 +334,8 @@ export default function App() {
     setJob(null);
     setProjects([]);
     setError(null);
+    setEstimate(null);
+    setEstimateError(null);
     setProcessing(false);
     setUploading(false);
     setScale(2);
@@ -324,6 +356,41 @@ export default function App() {
 
   const selectedProfiles = EXPORT_PROFILES.filter((profile) => profileIds.includes(profile.id));
   const hasPipelineSteps = scale > 1 || fps > 0 || smartColor || Boolean(colorPreset) || sharpness > 0;
+  const steps = useMemo(
+    () => buildJobSteps(scale, fps, colorPreset, smartColor, sharpness),
+    [scale, fps, colorPreset, smartColor, sharpness],
+  );
+
+  // The server is the source of truth for pricing. Refresh whenever the
+  // configuration or the balance changes, so the button reflects real funds.
+  useEffect(() => {
+    if (!video?.id || !hasPipelineSteps) {
+      setEstimate(null);
+      setEstimateLoading(false);
+      setEstimateError(null);
+      return undefined;
+    }
+
+    let active = true;
+    setEstimateLoading(true);
+    setEstimateError(null);
+    const timer = window.setTimeout(() => {
+      estimateJob(video.id, steps, profileIds)
+        .then((result) => { if (active) setEstimate(result); })
+        .catch((requestError: unknown) => {
+          if (active) {
+            setEstimate(null);
+            setEstimateError(getErrorMessage(requestError, 'Не удалось рассчитать стоимость'));
+          }
+        })
+        .finally(() => { if (active) setEstimateLoading(false); });
+    }, 150);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [video?.id, hasPipelineSteps, steps, profileIds, tokenBalance]);
 
   const handleFile = (selectedFile: File) => {
     const token = ++uploadSequence.current;
@@ -336,6 +403,8 @@ export default function App() {
     setProcessing(false);
     setUploading(true);
     setError(null);
+    setEstimate(null);
+    setEstimateError(null);
 
     // Upload immediately so the file metadata is available before the user
     // configures the pipeline. Ignore responses for replaced files.
@@ -362,21 +431,6 @@ export default function App() {
     try {
       const sourceVideo = video;
 
-      const steps: CreateJobStep[] = [];
-      // Interpolate first at the source resolution, then upscale and correct color.
-      if (fps > 0) steps.push({ type: 'interpolate', parameters: { target_fps: Number(fps) } });
-      if (scale > 1) steps.push({ type: 'upscale', parameters: { scale: Number(scale) } });
-      // Color correction is always the last step of the pipeline.
-      if (smartColor || colorPreset || sharpness > 0) {
-        const colorParameters: Record<string, number | string> = smartColor
-          ? { mode: 'smart' }
-          : colorPreset
-            ? { mode: 'preset', preset: colorPreset }
-            : { mode: 'preset' };
-        if (sharpness > 0) colorParameters.sharpness = Number(sharpness);
-        steps.push({ type: 'color_correct', parameters: colorParameters });
-      }
-
       const createdJob = await createJob(sourceVideo.id, steps);
       setJob(createdJob);
       setProjects((current) => [
@@ -391,6 +445,7 @@ export default function App() {
           message: createdJob.message ?? null,
           result_id: createdJob.result_id,
           error: createdJob.error,
+          credits_cost: createdJob.credits_cost,
           created_at: createdJob.created_at,
           started_at: createdJob.started_at,
           finished_at: createdJob.finished_at,
@@ -422,8 +477,14 @@ export default function App() {
           );
         }
       }
+
+      // The balance changed on the server; keep the topbar and estimate in sync.
+      await refreshUser().catch(() => undefined);
     } catch (requestError) {
       setError(getErrorMessage(requestError, 'Ошибка при запуске обработки'));
+      if (requestError instanceof ApiError && requestError.code === 'INSUFFICIENT_TOKENS') {
+        await refreshUser().catch(() => undefined);
+      }
       setProcessing(false);
     }
   };
@@ -455,6 +516,12 @@ export default function App() {
     }, 1000);
     return () => window.clearInterval(interval);
   }, [jobId, jobStatus]);
+
+  // The worker refunds failed jobs and cancellations after processing starts.
+  useEffect(() => {
+    if (!jobStatus || !['failed', 'cancelled'].includes(jobStatus)) return;
+    void refreshUser().catch(() => undefined);
+  }, [jobStatus, refreshUser]);
 
   // Keep step ETAs moving even between API responses.
   useEffect(() => {
@@ -640,6 +707,7 @@ export default function App() {
             }
           : project
       )));
+      await refreshUser().catch(() => undefined);
     } catch (requestError) {
       setError(getErrorMessage(requestError, 'Не удалось отменить обработку'));
     }
@@ -680,6 +748,11 @@ export default function App() {
         adaptationMode={adaptationMode}
         setAdaptationMode={setAdaptationMode}
         adaptationModes={ADAPTATION_MODES}
+        estimate={estimate}
+        estimateLoading={estimateLoading}
+        estimateError={estimateError}
+        tokenBalance={tokenBalance}
+        onTopUp={() => setView('billing')}
         onStart={handleSubmit}
       />
     </>

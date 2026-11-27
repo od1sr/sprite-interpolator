@@ -3,6 +3,7 @@ import type {
   CreateJobStep,
   ExportJob,
   Job,
+  JobEstimate,
   LoginRequest,
   ProjectPage,
   PurchasePlanRequest,
@@ -96,6 +97,18 @@ export async function createJob(
   steps: CreateJobStep[],
 ): Promise<Job> {
   return jsonRequest<Job>('/jobs', 'POST', { video_id: videoId, steps });
+}
+
+export async function estimateJob(
+  videoId: string,
+  steps: CreateJobStep[],
+  exportProfileIds: string[],
+): Promise<JobEstimate> {
+  return jsonRequest<JobEstimate>('/jobs/estimate', 'POST', {
+    video_id: videoId,
+    steps,
+    export_profile_ids: exportProfileIds,
+  });
 }
 
 export async function getColorPreview(

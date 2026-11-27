@@ -20,6 +20,12 @@ const COLOR_PRESET_OPTIONS = [
 const FPS_MULTIPLIERS = [2, 4, 8, 16];
 const MAX_TARGET_FPS = 120;
 
+const OPERATION_LABELS = {
+  interpolate: 'Интерполяция',
+  upscale: 'Апскейл',
+  color_correct: 'Коррекция цвета',
+};
+
 function buildFpsOptions(sourceFps) {
   const options = [{ value: 0, label: 'Не применять' }];
   const fps = Number(sourceFps);
@@ -167,6 +173,105 @@ function StyledSelect({ value, options, onChange, disabled = false, label }) {
   );
 }
 
+function CostPanel({
+  video,
+  hasPipelineSteps,
+  estimate,
+  estimateLoading,
+  estimateError,
+  tokenBalance,
+  onTopUp,
+}) {
+  if (!video) return null;
+
+  const breakdown = estimate?.breakdown;
+  const missing = estimate ? Math.max(0, estimate.total_credits - tokenBalance) : 0;
+  const formatNumber = (value) => new Intl.NumberFormat('ru-RU').format(value ?? 0);
+  const operations = breakdown
+    ? breakdown.operations.map((operation) => (
+        `${OPERATION_LABELS[operation.type] || operation.type} ×${operation.coefficient.toFixed(1)}`
+      )).join(' + ')
+    : '';
+
+  return (
+    <section className="panel cost-panel" aria-label="Стоимость обработки">
+      <div className="panel-head cost-head">
+        <h3>Стоимость обработки</h3>
+        <span className="muted-sm">Списание с баланса</span>
+      </div>
+
+      {!hasPipelineSteps ? (
+        <div className="notice">Выберите этап обработки, чтобы увидеть стоимость.</div>
+      ) : estimate ? (
+        <>
+          <div className="cost-grid">
+            <div className="cost-cell">
+              <span>Длительность</span>
+              <b>{breakdown.duration_minutes.toFixed(2)} мин</b>
+            </div>
+            <div className="cost-cell">
+              <span>Разрешение</span>
+              <b>{breakdown.resolution} · ×{breakdown.k_resolution.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}</b>
+            </div>
+            <div className="cost-cell">
+              <span>Частота кадров</span>
+              <b>{Number(breakdown.fps.toFixed(2))} FPS · ×{breakdown.k_fps.toFixed(1)}</b>
+            </div>
+            <div className="cost-cell">
+              <span>Операции</span>
+              <b>{operations}</b>
+            </div>
+          </div>
+
+          <div className="cost-formula">
+            100 × {breakdown.duration_minutes.toFixed(2)} × {breakdown.k_resolution} × {breakdown.k_fps} × {breakdown.k_operations} = {breakdown.credits} токенов
+          </div>
+
+          <div className="cost-lines">
+            <div className="cost-line">
+              <span>Обработка</span>
+              <b>{formatNumber(breakdown.credits)}</b>
+            </div>
+            {estimate.export_credits > 0 && (
+              <div className="cost-line">
+                <span>Экспорт · {Math.round(estimate.export_credits / estimate.export_cost_each)} формат(ов) × {estimate.export_cost_each}</span>
+                <b>{formatNumber(estimate.export_credits)}</b>
+              </div>
+            )}
+            <div className="cost-line cost-line-total">
+              <span>Нужно токенов</span>
+              <b>{formatNumber(estimate.total_credits)}</b>
+            </div>
+            <div className="cost-line">
+              <span>Доступно</span>
+              <b>{formatNumber(tokenBalance)}</b>
+            </div>
+          </div>
+
+          {estimate.affordable ? (
+            <div className="cost-hint">Токенов достаточно для запуска обработки.</div>
+          ) : (
+            <div className="notice warning cost-shortage">
+              Недостаточно токенов: не хватает {formatNumber(missing)}.
+              <button type="button" className="btn btn-ghost btn-sm" onClick={onTopUp}>
+                Пополнить баланс
+              </button>
+            </div>
+          )}
+          {estimateError && (
+            <div className="notice warning cost-shortage">{estimateError}. Стоимость будет проверена при запуске.</div>
+          )}
+        </>
+      ) : (
+        <div className="notice warning">
+          {estimateError || 'Расчёт стоимости…'}
+        </div>
+      )}
+      {estimateLoading && <div className="cost-loading" aria-hidden="true">Обновление расчёта…</div>}
+    </section>
+  );
+}
+
 export default function NewProcess({
   file,
   video,
@@ -190,6 +295,11 @@ export default function NewProcess({
   adaptationMode,
   setAdaptationMode,
   adaptationModes,
+  estimate,
+  estimateLoading,
+  estimateError,
+  tokenBalance,
+  onTopUp,
   onStart,
 }) {
   const sourceFps = video?.fps;
@@ -493,11 +603,24 @@ export default function NewProcess({
 
       </div>
 
+      <CostPanel
+        video={video}
+        hasPipelineSteps={hasPipelineSteps}
+        estimate={estimate}
+        estimateLoading={estimateLoading}
+        estimateError={estimateError}
+        tokenBalance={tokenBalance}
+        onTopUp={onTopUp}
+      />
+
       <div className="page-actions">
         <button
           className="btn btn-primary"
           onClick={onStart}
-          disabled={!file || !video || uploading || !hasPipelineSteps || processing}
+          disabled={
+            !file || !video || uploading || !hasPipelineSteps || processing
+            || estimateLoading || (estimate != null && !estimate.affordable)
+          }
         >
           {uploading ? 'Загрузка…' : processing ? 'Обработка…' : 'Запустить обработку'}
         </button>

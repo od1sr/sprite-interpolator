@@ -11,6 +11,30 @@ export interface CreateJobStep {
 }
 
 
+export interface CostBreakdown {
+  duration_seconds: number;
+  duration_minutes: number;
+  resolution: string;
+  resolution_pixels: number;
+  k_resolution: number;
+  fps: number;
+  k_fps: number;
+  operations: Array<{ type: StepType; coefficient: number }>;
+  k_operations: number;
+  credits: number;
+}
+
+
+export interface JobEstimate {
+  breakdown: CostBreakdown;
+  export_cost_each: number;
+  export_credits: number;
+  total_credits: number;
+  token_balance: number;
+  affordable: boolean;
+}
+
+
 export interface Video {
   id: string;
   filename: string;
@@ -55,6 +79,7 @@ export interface Job {
   message?: string;
   result_id: string | null;
   error: JobError | null;
+  credits_cost: number;
   created_at: string;
   started_at: string | null;  
   finished_at: string | null;  
@@ -95,6 +120,7 @@ export interface ExportJob {
   output_path: string | null;
   error_code: string | null;
   user_message: string | null;
+  credits_cost: number;
   created_at: string;
 }
 
@@ -110,6 +136,7 @@ export interface Project {
   message: string | null;
   result_id: string | null;
   error: JobError | null;
+  credits_cost: number;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;

@@ -133,6 +133,32 @@ class StepResponse(APIModel):
     error: dict[str, Any] | None
 
 
+class CostBreakdown(APIModel):
+    duration_seconds: float
+    duration_minutes: float
+    resolution: str
+    resolution_pixels: int
+    k_resolution: float
+    fps: float
+    k_fps: float
+    operations: list[dict[str, Any]]
+    k_operations: float
+    credits: int
+
+
+class JobEstimateRequest(JobCreate):
+    export_profile_ids: list[str] = Field(default_factory=list)
+
+
+class JobEstimateResponse(APIModel):
+    breakdown: CostBreakdown
+    export_cost_each: int
+    export_credits: int
+    total_credits: int
+    token_balance: int
+    affordable: bool
+
+
 class JobResponse(APIModel):
     id: UUID
     video_id: UUID
@@ -143,6 +169,8 @@ class JobResponse(APIModel):
     message: str | None
     result_id: UUID | None
     error: dict[str, Any] | None
+    credits_cost: int
+    credits_breakdown: dict[str, Any] | None
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
@@ -178,6 +206,7 @@ class ExportJobResponse(APIModel):
     output_path: str | None
     error_code: str | None
     user_message: str | None
+    credits_cost: int
     created_at: datetime
 
 class ProjectResponse(APIModel):
@@ -191,6 +220,7 @@ class ProjectResponse(APIModel):
     message: str | None
     result_id: UUID | None
     error: dict[str, Any] | None
+    credits_cost: int
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None

@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, JSON, String
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -65,6 +65,9 @@ class Job(Base):
     message: Mapped[str | None] = mapped_column(String(255), nullable=True)
     result_id: Mapped[UUID | None] = mapped_column(nullable=True)
     error: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    credits_cost: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    credits_breakdown: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    credits_refunded: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -113,6 +116,8 @@ class ExportJob(Base):
     output_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     user_message: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    credits_cost: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    credits_refunded: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -41,6 +41,9 @@ class Settings:
 
 settings = Settings()
 
+# Fixed price of one export format, charged when its export job is created.
+EXPORT_TOKEN_COST = 10
+
 # Token packages granted when a user selects a plan in Billing.
 PLAN_TOKENS = {
     "free": 300,

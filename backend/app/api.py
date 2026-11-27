@@ -7,7 +7,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from app.config import COLOR_PRESETS, EXPORT_PROFILES, PLAN_TOKENS, STEP_ORDER, settings
+from app.config import (
+    COLOR_PRESETS,
+    EXPORT_PROFILES,
+    EXPORT_TOKEN_COST,
+    PLAN_TOKENS,
+    STEP_ORDER,
+    settings,
+)
 
 import httpx
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
@@ -23,16 +30,25 @@ from app.auth import (
     set_auth_cookie,
     verify_password,
 )
+from app.billing import (
+    charge_tokens,
+    refund_export,
+    refund_job,
+    refund_tokens,
+)
 from app.database import get_session
 from app.errors import APIError
 from app.media import probe_video
 from app.models import ExportJob, Job, Result, User, Video
+from app.pricing import PricingError, estimate_job_cost, fps_coefficient, resolution_coefficient
 from app.queue import celery_app
 from app.schemas import (
     ExportJobCreate,
     ColorPreviewRequest,
     ExportJobResponse,
     JobCreate,
+    JobEstimateRequest,
+    JobEstimateResponse,
     JobResponse,
     LoginIn,
     PlanPurchaseIn,
@@ -50,6 +66,34 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1")
 ACTIVE_STATUSES = {"queued", "processing", "cancelling"}
 SUPPORTED_FPS_MULTIPLIERS = (1, 2, 4, 8, 16)
+
+
+def _raise_pricing_error(exc: PricingError) -> None:
+    raise APIError(422, exc.code, exc.message, exc.details) from exc
+
+
+def _validate_video_metadata(metadata: dict) -> None:
+    """Reject sources whose resolution or FPS is outside product limits."""
+    try:
+        resolution_coefficient(metadata.get("width"), metadata.get("height"))
+        fps_coefficient(metadata.get("fps"))
+    except PricingError as exc:
+        _raise_pricing_error(exc)
+
+
+def _estimate_for_video(video: Video, steps: list[dict]) -> dict:
+    try:
+        return estimate_job_cost(
+            {
+                "duration_seconds": video.duration_seconds,
+                "width": video.width,
+                "height": video.height,
+                "fps": video.fps,
+            },
+            steps,
+        )
+    except PricingError as exc:
+        _raise_pricing_error(exc)
 
 
 def _validate_interpolate_steps(video: Video, steps: list) -> None:
@@ -183,7 +227,15 @@ def _get_owned_export(session: Session, export_id: UUID, user: User, *, lock: bo
     return export
 
 
-def _new_job(video_id: UUID, user_id: UUID, steps: list[dict], message: str) -> Job:
+def _new_job(
+    video_id: UUID,
+    user_id: UUID,
+    steps: list[dict],
+    message: str,
+    *,
+    credits_cost: int = 0,
+    credits_breakdown: dict | None = None,
+) -> Job:
     return Job(
         video_id=video_id,
         user_id=user_id,
@@ -203,6 +255,8 @@ def _new_job(video_id: UUID, user_id: UUID, steps: list[dict], message: str) -> 
         progress=0,
         current_step=None,
         message=message,
+        credits_cost=credits_cost,
+        credits_breakdown=credits_breakdown,
     )
 
 
@@ -211,6 +265,7 @@ def _enqueue_job(session: Session, job: Job) -> None:
         process_job.apply_async(args=[str(job.id)])
     except Exception as exc:
         logger.exception("Failed to enqueue job %s", job.id)
+        refund_job(session, job)
         session.delete(job)
         session.commit()
         raise APIError(503, "SERVICE_UNAVAILABLE", "Очередь задач временно недоступна") from exc
@@ -221,6 +276,7 @@ def _enqueue_export_job(session: Session, job: ExportJob) -> None:
         process_export_job.apply_async(args=[str(job.id)])
     except Exception as exc:
         logger.exception("Failed to enqueue export %s", job.id)
+        refund_export(session, job)
         session.delete(job)
         session.commit()
         raise APIError(503, "SERVICE_UNAVAILABLE", "Очередь задач временно недоступна") from exc
@@ -336,6 +392,7 @@ async def upload_video(
         if size_bytes == 0:
             raise APIError(422, "VALIDATION_ERROR", "Загруженный файл пуст")
         metadata = probe_video(destination)
+        _validate_video_metadata(metadata)
         content_type = {
             ".mp4": "video/mp4",
             ".mov": "video/quicktime",
@@ -491,6 +548,29 @@ def delete_video(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.post("/jobs/estimate", response_model=JobEstimateResponse)
+def estimate_job(
+    payload: JobEstimateRequest,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> dict:
+    video = _get_owned_video(session, payload.video_id, user)
+    _validate_interpolate_steps(video, payload.steps)
+    breakdown = _estimate_for_video(video, [step.model_dump() for step in payload.steps])
+    export_count = len(set(payload.export_profile_ids) & set(EXPORT_PROFILES))
+    export_credits = export_count * EXPORT_TOKEN_COST
+    total_credits = breakdown["credits"] + export_credits
+    balance = session.scalar(select(User.token_balance).where(User.id == user.id)) or 0
+    return {
+        "breakdown": breakdown,
+        "export_cost_each": EXPORT_TOKEN_COST,
+        "export_credits": export_credits,
+        "total_credits": total_credits,
+        "token_balance": balance,
+        "affordable": balance >= total_credits,
+    }
+
+
 @router.post("/jobs", response_model=JobResponse, status_code=status.HTTP_202_ACCEPTED)
 def create_job(
     payload: JobCreate,
@@ -501,11 +581,17 @@ def create_job(
     if not _video_path(video).is_file():
         raise APIError(409, "INVALID_STATE", "Исходный файл больше недоступен")
     _validate_interpolate_steps(video, payload.steps)
+    steps = [step.model_dump() for step in payload.steps]
+    breakdown = _estimate_for_video(video, steps)
+    credits = breakdown["credits"]
+    charge_tokens(session, user.id, credits)
     job = _new_job(
         payload.video_id,
         user.id,
-        [step.model_dump() for step in payload.steps],
+        steps,
         "Задача добавлена в очередь",
+        credits_cost=credits,
+        credits_breakdown=breakdown,
     )
     session.add(job)
     session.commit()
@@ -572,6 +658,7 @@ def list_jobs(
             "message": job.message,
             "result_id": job.result_id,
             "error": job.error,
+            "credits_cost": job.credits_cost,
             "created_at": job.created_at,
             "started_at": job.started_at,
             "finished_at": job.finished_at,
@@ -602,6 +689,7 @@ def cancel_job(
     if job.status in {"completed", "failed"}:
         raise APIError(409, "INVALID_STATE", "Задачу в текущем состоянии нельзя отменить", {"status": job.status})
     if job.status == "queued":
+        refund_job(session, job)
         job.status = "cancelled"
         job.message = "Задача отменена"
         job.finished_at = datetime.now(timezone.utc)
@@ -626,9 +714,12 @@ def cancel_job(
         )
     ).all()
     for export in exports:
+        was_queued = export.status == "queued"
         export.status = "cancelled"
         export.user_message = "Задача отменена"
         export.finished_at = datetime.now(timezone.utc)
+        if was_queued:
+            refund_export(session, export)
 
     session.commit()
     session.refresh(job)
@@ -696,11 +787,19 @@ def retry_job(
     video = _get_owned_video(session, previous.video_id, user, lock=True)
     if not _video_path(video).is_file():
         raise APIError(409, "INVALID_STATE", "Исходный файл больше недоступен")
+    credits = previous.credits_cost
+    breakdown = previous.credits_breakdown
+    if not credits:
+        breakdown = _estimate_for_video(video, previous.steps)
+        credits = breakdown["credits"]
+    charge_tokens(session, user.id, credits)
     retry = _new_job(
         video.id,
         user.id,
         previous.steps,
         "Повторная задача добавлена в очередь",
+        credits_cost=credits,
+        credits_breakdown=breakdown,
     )
     session.add(retry)
     session.commit()
@@ -796,6 +895,8 @@ def create_export(
     if not profile:
         raise APIError(404, "RESOURCE_NOT_FOUND", "Профиль экспорта не найден")
 
+    already_cancelled = source_job is not None and source_job.status in {"failed", "cancelled"}
+
     if payload.adaptation_mode not in profile["allowed_modes"]:
         raise APIError(
             422,
@@ -803,6 +904,8 @@ def create_export(
             f"Режим {payload.adaptation_mode} не поддерживается для этого профиля",
         )
 
+    if not already_cancelled:
+        charge_tokens(session, user.id, EXPORT_TOKEN_COST)
     job = ExportJob(
         video_id=video_id,
         user_id=user.id,
@@ -811,6 +914,7 @@ def create_export(
         config_snapshot=profile,
         adaptation_mode=payload.adaptation_mode,
         status="queued",
+        credits_cost=0 if already_cancelled else EXPORT_TOKEN_COST,
     )
 
     # Exports linked to a processing job must use its result, not the source
