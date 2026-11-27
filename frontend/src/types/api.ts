@@ -128,6 +128,8 @@ export interface User {
   id: string;
   username: string;
   display_name: string | null;
+  plan: string;
+  token_balance: number;
   created_at: string;
 }
 
@@ -140,4 +142,8 @@ export interface RegisterRequest {
 export interface LoginRequest {
   username: string;
   password: string;
+}
+
+export interface PurchasePlanRequest {
+  plan: string;
 }

@@ -1,22 +1,23 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getCurrentUser, loginUser, logoutUser, registerUser } from '../api/client';
+import {
+  getCurrentUser,
+  loginUser,
+  logoutUser,
+  purchasePlan,
+  registerUser,
+} from '../api/client';
 
 const LEGACY_STORAGE_KEY = 'zarya_user';
-const PLAN_STORAGE_PREFIX = 'zarya_plan:';
 
 const PLANS = {
-  free:    { id: 'free',  name: 'Free',  price: '0 ₽',     credits: 300,   usedCredits: 0 },
-  start:   { id: 'start', name: 'Start', price: '290 ₽',   credits: 1350,  usedCredits: 0 },
-  creator: { id: 'creator', name: 'Creator', price: '590 ₽', credits: 2750, usedCredits: 0 },
-  pro:     { id: 'pro',   name: 'Pro',   price: '1 490 ₽', credits: 7000,  usedCredits: 0 },
-  business_start: { id: 'business_start', name: 'Business Start', price: '14 900 ₽', credits: 20000, usedCredits: 0 },
-  business_pro:   { id: 'business_pro',   name: 'Business Pro',   price: '29 900 ₽', credits: 40000, usedCredits: 0 },
-  enterprise:     { id: 'enterprise',     name: 'Enterprise',     price: 'от 49 900 ₽', credits: 70000, usedCredits: 0 },
+  free:    { id: 'free',  name: 'Free',  price: '0 ₽',     tokens: 300 },
+  start:   { id: 'start', name: 'Start', price: '290 ₽',   tokens: 1350 },
+  creator: { id: 'creator', name: 'Creator', price: '590 ₽', tokens: 2750 },
+  pro:     { id: 'pro',   name: 'Pro',   price: '1 490 ₽', tokens: 7000 },
+  business_start: { id: 'business_start', name: 'Business Start', price: '14 900 ₽', tokens: 20000 },
+  business_pro:   { id: 'business_pro',   name: 'Business Pro',   price: '29 900 ₽', tokens: 40000 },
+  enterprise:     { id: 'enterprise',     name: 'Enterprise',     price: 'от 49 900 ₽', tokens: 70000 },
 };
-
-function planKey(userId) {
-  return `${PLAN_STORAGE_PREFIX}${userId || 'anonymous'}`;
-}
 
 export function useAuth() {
   const [user, setUser] = useState(null);
@@ -63,19 +64,20 @@ export function useAuth() {
     }
   }, []);
 
+  const buyPlan = useCallback(async (plan) => {
+    const current = await purchasePlan({ plan });
+    setUser(current);
+    return current;
+  }, []);
+
   const updateProfile = useCallback((patch) => {
-    setUser((current) => {
-      if (!current) return current;
-      if (patch.plan) localStorage.setItem(planKey(current.id), patch.plan);
-      return { ...current, ...patch };
-    });
+    setUser((current) => (current ? { ...current, ...patch } : current));
   }, []);
 
   const getPlan = useCallback(() => {
-    if (!user) return PLANS.free;
-    const planId = user.plan || localStorage.getItem(planKey(user.id)) || 'free';
-    return PLANS[planId] || PLANS.free;
+    const plan = user?.plan || 'free';
+    return { ...(PLANS[plan] || PLANS.free), token_balance: user?.token_balance ?? 0 };
   }, [user]);
 
-  return { user, isLoading, login, register, logout, getPlan, updateProfile };
+  return { user, isLoading, login, register, logout, buyPlan, getPlan, updateProfile };
 }

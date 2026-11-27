@@ -41,6 +41,17 @@ class Settings:
 
 settings = Settings()
 
+# Token packages granted when a user selects a plan in Billing.
+PLAN_TOKENS = {
+    "free": 300,
+    "start": 1350,
+    "creator": 2750,
+    "pro": 7000,
+    "business_start": 20000,
+    "business_pro": 40000,
+    "enterprise": 70000,
+}
+
 # Color-correction presets shared by API validation and the AI service.
 COLOR_PRESETS = ("natural", "cinema", "vivid", "warm", "cool")
 

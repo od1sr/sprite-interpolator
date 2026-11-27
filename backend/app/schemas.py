@@ -219,4 +219,10 @@ class UserOut(APIModel):
     id: UUID
     username: str
     display_name: str | None
+    plan: str
+    token_balance: int
     created_at: datetime
+
+
+class PlanPurchaseIn(BaseModel):
+    plan: str = Field(min_length=1, max_length=32)

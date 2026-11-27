@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy import select
 
+from app.config import PLAN_TOKENS
 from app.models import ExportJob, Job, Result, User, Video
 from app.storage import user_relative_path
 
@@ -697,6 +698,8 @@ def test_register_login_me_and_duplicate_username(client):
     )
     assert registered.status_code == 201
     assert registered.json()["username"] == "newuser"
+    assert registered.json()["plan"] == "free"
+    assert registered.json()["token_balance"] == PLAN_TOKENS["free"]
     assert "password" not in registered.json()
     assert test_client.get("/api/v1/auth/me").json()["username"] == "newuser"
 
@@ -723,6 +726,39 @@ def test_register_login_me_and_duplicate_username(client):
     )
     assert logged_in.status_code == 200
     assert test_client.get("/api/v1/auth/me").status_code == 200
+
+
+def test_plan_purchase_adds_tokens_to_user_balance(client, user):
+    test_client, sessions = client
+
+    first = test_client.post("/api/v1/billing/purchase", json={"plan": "start"})
+    assert first.status_code == 200
+    assert first.json()["plan"] == "start"
+    assert first.json()["token_balance"] == 300 + PLAN_TOKENS["start"]
+
+    second = test_client.post("/api/v1/billing/purchase", json={"plan": "start"})
+    assert second.status_code == 200
+    assert second.json()["token_balance"] == 300 + 2 * PLAN_TOKENS["start"]
+    assert test_client.get("/api/v1/auth/me").json()["token_balance"] == second.json()["token_balance"]
+
+    with sessions() as session:
+        stored = session.get(User, user.id)
+        assert stored.plan == "start"
+        assert stored.token_balance == 300 + 2 * PLAN_TOKENS["start"]
+
+
+def test_plan_purchase_rejects_unknown_plan(client):
+    test_client, _ = client
+    response = test_client.post("/api/v1/billing/purchase", json={"plan": "unknown"})
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_plan_purchase_requires_auth(client):
+    test_client, _ = client
+    test_client.cookies.clear()
+    response = test_client.post("/api/v1/billing/purchase", json={"plan": "pro"})
+    assert response.status_code == 401
 
 
 def test_users_cannot_see_or_use_another_users_resources(client, monkeypatch, user):

@@ -19,6 +19,8 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     display_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    plan: Mapped[str] = mapped_column(String(32), default="free", server_default="free")
+    token_balance: Mapped[int] = mapped_column(Integer, default=300, server_default="300")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from app.config import COLOR_PRESETS, EXPORT_PROFILES, STEP_ORDER, settings
+from app.config import COLOR_PRESETS, EXPORT_PROFILES, PLAN_TOKENS, STEP_ORDER, settings
 
 import httpx
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
@@ -35,6 +35,7 @@ from app.schemas import (
     JobCreate,
     JobResponse,
     LoginIn,
+    PlanPurchaseIn,
     ProjectPage,
     RegisterIn,
     ResultResponse,
@@ -234,6 +235,8 @@ def register(payload: RegisterIn, response: Response, session: Session = Depends
         username=username,
         password_hash=hash_password(payload.password),
         display_name=(payload.display_name or "").strip() or None,
+        plan="free",
+        token_balance=PLAN_TOKENS["free"],
     )
     session.add(user)
     try:
@@ -266,6 +269,32 @@ def logout(response: Response) -> Response:
     clear_auth_cookie(response)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
+
+
+@router.post("/billing/purchase", response_model=UserOut)
+def purchase_plan(
+    payload: PlanPurchaseIn,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> User:
+    plan = payload.plan.strip().lower()
+    if plan not in PLAN_TOKENS:
+        raise APIError(
+            422,
+            "VALIDATION_ERROR",
+            "Неизвестный тариф",
+            {"plan": plan, "available_plans": sorted(PLAN_TOKENS)},
+        )
+    user.plan = plan
+    user.token_balance += PLAN_TOKENS[plan]
+    try:
+        session.commit()
+        session.refresh(user)
+    except SQLAlchemyError as exc:
+        session.rollback()
+        raise APIError(500, "INTERNAL_ERROR", "Не удалось начислить токены") from exc
+    logger.info("User %s purchased plan %s (+%d tokens)", user.id, plan, PLAN_TOKENS[plan])
+    return user
 
 
 @router.post("/videos", response_model=VideoResponse, status_code=status.HTTP_201_CREATED)

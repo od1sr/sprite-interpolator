@@ -566,6 +566,14 @@ ul,ol{margin:0;padding:0;list-style:none}
 .topbar h1{font-size:16px;font-weight:400;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .topbar-actions{display:flex;align-items:center;gap:16px}
 .topbar-actions .btn svg{width:16px;height:16px;opacity:.85}
+.token-balance{
+  display:flex;align-items:center;gap:8px;height:32px;padding:0 11px;
+  border:1px solid var(--line-2);border-radius:999px;background:var(--surface);
+  white-space:nowrap;
+}
+.token-balance svg{width:15px;height:15px;color:var(--accent);flex:0 0 auto}
+.token-balance b{font-family:var(--mono);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text)}
+.token-balance span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .content{padding:28px;width:100%;max-width:1240px;margin:0 auto}
 
 /* User menu (legacy) */

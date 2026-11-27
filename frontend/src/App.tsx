@@ -274,8 +274,9 @@ function TaskRow({
 }
 
 export default function App() {
-  const { user, isLoading, login, register, logout, getPlan, updateProfile } = useAuth();
+  const { user, isLoading, login, register, logout, buyPlan, getPlan, updateProfile } = useAuth();
   const currentUserId = user ? (user as User).id : null;
+  const tokenBalance = user ? (user as User).token_balance : 0;
   const [view, setView] = useState<View>('landing');
   const [projectFilter, setProjectFilter] = useState('all');
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -714,7 +715,7 @@ export default function App() {
       case 'settings':
         return <Settings user={user} onUpdateProfile={updateProfile} />;
       case 'billing':
-        return <Billing currentPlan={getPlan()} onPlanChange={(plan: string) => updateProfile({ plan })} />;
+        return <Billing user={user} onPlanChange={buyPlan} />;
       default:
         return renderDashboard();
     }
@@ -769,6 +770,15 @@ export default function App() {
             <h1>{VIEW_TITLES[view]}</h1>
           </div>
           <div className="topbar-actions">
+            <div className="token-balance" title="Доступные токены">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 2l7 4v12l-7 4-7-4V6z" />
+                <path d="M12 6l3.5 2v8L12 18l-3.5-2V8z" />
+                <path d="M12 6v12M8.5 8L12 10l3.5-2M8.5 16L12 14l3.5 2" />
+              </svg>
+              <b>{new Intl.NumberFormat('ru-RU').format(tokenBalance)}</b>
+              <span>токенов</span>
+            </div>
             <button className="btn btn-ghost btn-sm" onClick={handleLogout}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />

@@ -1,104 +1,114 @@
-import React from 'react';
+import React, { useState } from 'react';
 
-export default function Billing({ currentPlan, onPlanChange }) {
-  // Личные тарифы (для частных пользователей)
-  const personalPlans = [
-    { id: 'free',     name: 'Free',    price: '0 ₽',      credits: '300',    rule: 'Пробный доступ при регистрации' },
-    { id: 'start',    name: 'Start',   price: '290 ₽',    credits: '1 350',  rule: 'Разовая покупка пакета' },
-    { id: 'creator',  name: 'Creator', price: '590 ₽',    credits: '2 750',  rule: 'Разовая покупка пакета' },
-    { id: 'pro',      name: 'Pro',     price: '1 490 ₽',  credits: '7 000',  rule: 'Разовая покупка пакета' },
-  ];
+const PLANS = [
+  { id: 'free',     name: 'Free',            price: '0 ₽',        tokens: 300,   rule: 'Пробный доступ при регистрации', group: 'personal' },
+  { id: 'start',    name: 'Start',           price: '290 ₽',      tokens: 1350,  rule: 'Разовая покупка пакета', group: 'personal' },
+  { id: 'creator',  name: 'Creator',         price: '590 ₽',      tokens: 2750,  rule: 'Разовая покупка пакета', group: 'personal' },
+  { id: 'pro',      name: 'Pro',             price: '1 490 ₽',    tokens: 7000,  rule: 'Разовая покупка пакета', group: 'personal' },
+  { id: 'business_start', name: 'Business Start', price: '14 900 ₽', tokens: 20000, rule: 'Общий баланс организации', group: 'business' },
+  { id: 'business_pro',   name: 'Business Pro',   price: '29 900 ₽', tokens: 40000, rule: 'Общий баланс организации', group: 'business' },
+  { id: 'enterprise',     name: 'Enterprise',     price: 'от 49 900 ₽', tokens: 70000, rule: 'Индивидуальные условия и объём', group: 'business' },
+];
 
-  // Корпоративные тарифы (для компаний и команд)
-  const businessPlans = [
-    { id: 'business_start', name: 'Business Start', price: '14 900 ₽',    credits: '20 000',   rule: 'Общий баланс организации' },
-    { id: 'business_pro',   name: 'Business Pro',   price: '29 900 ₽',    credits: '40 000',   rule: 'Общий баланс организации' },
-    { id: 'enterprise',     name: 'Enterprise',     price: 'от 49 900 ₽', credits: 'от 70 000', rule: 'Индивидуальные условия и объём' },
-  ];
+const formatNumber = (value) => new Intl.NumberFormat('ru-RU').format(value || 0);
 
-  const usedCredits = currentPlan?.usedCredits ?? currentPlan?.used ?? 0;
-  const totalCredits = currentPlan?.credits ?? currentPlan?.quota ?? 1350;
-  const remainingCredits = Math.max(0, totalCredits - usedCredits);
-  const usagePercent = totalCredits ? Math.min(100, (usedCredits / totalCredits) * 100) : 0;
+export default function Billing({ user, onPlanChange }) {
+  const [busyPlan, setBusyPlan] = useState(null);
+  const [error, setError] = useState('');
+
+  const currentPlanId = user?.plan || 'free';
+  const currentPlan = PLANS.find((plan) => plan.id === currentPlanId) || PLANS[0];
+  const balance = user?.token_balance ?? 0;
+
+  const handleBuy = async (plan) => {
+    setBusyPlan(plan.id);
+    setError('');
+    try {
+      await onPlanChange(plan.id);
+    } catch (requestError) {
+      setError(requestError?.message || 'Не удалось начислить токены. Попробуйте ещё раз.');
+    } finally {
+      setBusyPlan(null);
+    }
+  };
 
   const renderPlanCard = (plan) => (
     <div className="plan-opt" key={plan.id}>
       <b>{plan.name}</b>
       <span>{plan.price}</span>
       <span style={{ color: 'var(--accent)', fontWeight: 600, fontSize: 13 }}>
-        {plan.credits} кредитов
+        +{formatNumber(plan.tokens)} токенов
       </span>
       <span style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{plan.rule}</span>
       <button
         className="btn btn-ghost btn-sm"
-        onClick={() => onPlanChange && onPlanChange(plan.id)}
+        onClick={() => handleBuy(plan)}
+        disabled={busyPlan !== null}
       >
-        {currentPlan?.id === plan.id ? 'Текущий' : 'Выбрать'}
+        {busyPlan === plan.id
+          ? 'Начисляем…'
+          : currentPlanId === plan.id ? 'Купить ещё' : 'Купить'}
       </button>
     </div>
   );
 
   return (
     <div>
-
-      {/* Приветствие */}
       <div className="welcome">
         <div>
           <span className="welcome-eyebrow">Подписка</span>
-          <h2 className="welcome-title">Тарифы и кредиты</h2>
+          <h2 className="welcome-title">Тарифы и токены</h2>
           <p className="welcome-sub">
-            Управляйте подпиской, покупайте пакеты кредитов и просматривайте историю платежей.
+            Выберите пакет — токены сразу попадут на баланс вашего аккаунта.
           </p>
         </div>
       </div>
 
-      {/* Текущий тариф */}
+      {error && <div className="error-banner" role="alert">⚠️ {error}</div>}
+
       <div className="panel">
         <div className="panel-head">
           <h3>Текущий тариф</h3>
-          <span className="pill pill-accent">{currentPlan?.name || 'Start'}</span>
+          <span className="pill pill-accent">{currentPlan.name}</span>
         </div>
         <div className="current-plan">
           <div>
-            <div className="plan-name">{currentPlan?.name || 'Start'}</div>
+            <div className="plan-name">{currentPlan.name}</div>
             <div className="plan-price">
-              {currentPlan?.price || '290 ₽'} <span>/ пакет</span>
+              {currentPlan.price} <span>/ пакет</span>
             </div>
           </div>
           <div className="plan-usage">
             <div className="muted-sm">
-              {usedCredits.toLocaleString('ru-RU')} из {totalCredits.toLocaleString('ru-RU')} кредитов использовано
+              Доступно <b>{formatNumber(balance)}</b> токенов
             </div>
             <div className="bar">
-              <i style={{ width: `${usagePercent}%` }}></i>
+              <i style={{ width: '100%' }}></i>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Личные тарифы */}
       <div className="panel">
         <div className="panel-head">
           <h3>Для частных пользователей</h3>
-          <span className="muted-sm">Разовые пакеты кредитов</span>
+          <span className="muted-sm">Разовые пакеты токенов</span>
         </div>
         <div className="plan-options">
-          {personalPlans.map(renderPlanCard)}
+          {PLANS.filter((plan) => plan.group === 'personal').map(renderPlanCard)}
         </div>
       </div>
 
-      {/* Корпоративные тарифы */}
       <div className="panel">
         <div className="panel-head">
           <h3>Для компаний и команд</h3>
-          <span className="muted-sm">Ежемесячный общий баланс</span>
+          <span className="muted-sm">Общий баланс организации</span>
         </div>
         <div className="plan-options">
-          {businessPlans.map(renderPlanCard)}
+          {PLANS.filter((plan) => plan.group === 'business').map(renderPlanCard)}
         </div>
       </div>
 
-      {/* История платежей */}
       <div className="panel">
         <div className="panel-head"><h3>История платежей</h3></div>
         <div className="table-wrap">
@@ -108,7 +118,7 @@ export default function Billing({ currentPlan, onPlanChange }) {
                 <th>Дата</th>
                 <th>Тариф</th>
                 <th>Сумма</th>
-                <th>Кредиты</th>
+                <th>Токены</th>
                 <th>Статус</th>
               </tr>
             </thead>
@@ -138,7 +148,6 @@ export default function Billing({ currentPlan, onPlanChange }) {
           </table>
         </div>
       </div>
-
     </div>
   );
 }
