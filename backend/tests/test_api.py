@@ -839,6 +839,7 @@ def test_users_cannot_see_or_use_another_users_resources(client, monkeypatch, us
 
     video_id = upload(test_client, monkeypatch).json()["id"]
     monkeypatch.setattr(api.process_job, "apply_async", lambda args: None)
+    monkeypatch.setattr(api.process_export_job, "apply_async", lambda args: None)
     job_id = test_client.post(
         "/api/v1/jobs",
         json={"video_id": video_id, "steps": [{"type": "upscale", "parameters": {"scale": 2}}]},

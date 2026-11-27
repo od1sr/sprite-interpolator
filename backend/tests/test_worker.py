@@ -92,7 +92,7 @@ def test_worker_processes_pipeline_and_persists_result(worker_context, monkeypat
         }
 
     monkeypatch.setattr(worker, "_call_ai", fake_ai_call)
-    worker.process_job.run(str(job_id))
+    assert worker.process_job.apply(args=[str(job_id)], throw=False).successful()
 
     with sessions() as session:
         job = session.scalar(select(Job).where(Job.id == job_id))
@@ -215,7 +215,9 @@ def test_worker_records_retryable_ai_failure(worker_context, monkeypatch):
         )
 
     monkeypatch.setattr(worker, "_call_ai", fail_ai_call)
-    worker.process_job.run(str(job_id))
+    result = worker.process_job.apply(args=[str(job_id)], throw=False)
+    assert result.failed()
+    assert isinstance(result.result, worker.PipelineFailure)
 
     with sessions() as session:
         job = session.scalar(select(Job).where(Job.id == job_id))
@@ -389,3 +391,38 @@ def test_export_worker_uses_linked_job_result(worker_context, monkeypatch):
     assert seen == [b"processed"]
     with sessions() as session:
         assert session.get(ExportJob, export_id).status == "ready"
+
+def test_unexpected_worker_failure_reaches_celery(worker_context, monkeypatch):
+    worker, sessions, _, job_id = worker_context
+
+    def fail(*args):
+        raise RuntimeError("unexpected failure")
+
+    monkeypatch.setattr(worker, "_call_ai", fail)
+    assert worker.process_job.apply(args=[str(job_id)], throw=False).failed()
+    with sessions() as session:
+        job = session.get(Job, job_id)
+        assert job.status == "failed"
+        assert job.error["code"] == "INTERNAL_ERROR"
+
+
+@pytest.mark.parametrize("linked,code", [(True, "RESULT_NOT_FOUND"), (False, "FFMPEG_ERROR")])
+def test_export_failure_reaches_celery(worker_context, monkeypatch, linked, code):
+    worker, sessions, _, job_id = worker_context
+    export_id = uuid4()
+    with sessions.begin() as session:
+        video = session.scalar(select(Video))
+        session.add(ExportJob(id=export_id, video_id=video.id, user_id=video.user_id,
+                              job_id=job_id if linked else None, profile_id="youtube_standard_v1",
+                              config_snapshot={}, adaptation_mode="crop", status="queued"))
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("encode failed")
+
+    monkeypatch.setattr(worker, "run_ffmpeg_export", fail)
+    assert worker.process_export_job.apply(args=[str(export_id)], throw=False).failed()
+    with sessions() as session:
+        export = session.get(ExportJob, export_id)
+        assert export.status == "failed"
+        assert export.error_code == code
+        assert export.finished_at is not None

@@ -251,8 +251,8 @@ def process_job(_: Any, job_id: str) -> None:
     source = settings.storage_root / video.storage_key
     work_dir = settings.storage_root / user_relative_path(job.user_id, "jobs", str(job.id))
     result_path: Path | None = None
-    work_dir.mkdir(parents=True, exist_ok=True)
     try:
+        work_dir.mkdir(parents=True, exist_ok=True)
         if not source.is_file():
             raise PipelineFailure("STORAGE_ERROR", "Исходный файл больше недоступен", False, None)
         with SessionLocal.begin() as session:
@@ -366,7 +366,8 @@ def process_job(_: Any, job_id: str) -> None:
         }
         with SessionLocal.begin() as session:
             current = session.scalar(select(Job).where(Job.id == parsed_id).with_for_update())
-            if current is not None and current.status in {"cancelling", "cancelled"}:
+            cancelled = current is not None and current.status in {"cancelling", "cancelled"}
+            if cancelled:
                 _mark_cancelled(current)
             elif current is not None:
                 current.status = "failed"
@@ -375,6 +376,8 @@ def process_job(_: Any, job_id: str) -> None:
                 current.finished_at = _now()
                 refund_job(session, current)
         _cancel_pending_exports(parsed_id)
+        if not cancelled:
+            raise
     except Exception:
         logger.exception("Unexpected processing error for job %s", parsed_id)
         _cleanup_work_dir(work_dir)
@@ -401,6 +404,7 @@ def process_job(_: Any, job_id: str) -> None:
                     current.steps = steps
                 refund_job(session, current)
         _cancel_pending_exports(parsed_id)
+        raise
 
 
 @celery_app.task(name="app.worker.process_export_job", bind=True)
@@ -414,10 +418,12 @@ def process_export_job(_: Any, export_job_id: str) -> None:
         video = session.get(Video, job.video_id)
         if not video:
             job.status = "failed"
+            job.finished_at = _now()
+            job.error_code = "VIDEO_NOT_FOUND"
             job.user_message = "Исходное видео не найдено"
             refund_export(session, job)
             session.commit()
-            return
+            raise RuntimeError("VIDEO_NOT_FOUND")
         duration_seconds = video.duration_seconds
 
         job.status = "analyzing"
@@ -439,7 +445,7 @@ def process_export_job(_: Any, export_job_id: str) -> None:
                 job.finished_at = _now()
                 refund_export(session, job)
                 session.commit()
-                return
+                raise RuntimeError("RESULT_NOT_FOUND")
             duration_seconds = result.duration_seconds or duration_seconds
             input_path = result_path
 
@@ -494,3 +500,4 @@ def process_export_job(_: Any, export_job_id: str) -> None:
             job.finished_at = _now()
             refund_export(session, job)
             session.commit()
+            raise
