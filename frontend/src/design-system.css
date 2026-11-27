@@ -499,10 +499,6 @@ ul,ol{margin:0;padding:0;list-style:none}
   display:flex;flex-direction:column;gap:5px;position:sticky;top:0;height:100vh;
   background:var(--bg);overflow:hidden;transition:width .2s ease,flex-basis .2s ease;
 }
-.sidebar::before{
-  content:'';position:absolute;left:8px;top:86px;bottom:92px;width:1px;pointer-events:none;
-  background:repeating-linear-gradient(to bottom,var(--line-2) 0 3px,transparent 3px 12px);
-}
 .side-top{display:flex;align-items:center;gap:8px;margin-bottom:26px;padding:0 2px;position:relative;z-index:1}
 .side-brand{padding:0 8px;margin-bottom:0;min-width:0}
 .side-brand .brand-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -545,7 +541,6 @@ ul,ol{margin:0;padding:0;list-style:none}
 .avatar.sm{width:28px;height:28px;font-size:10px}
 @media (min-width:881px){
   .sidebar.collapsed{width:72px;flex-basis:72px}
-  .sidebar.collapsed::before{left:50%;transform:translateX(-50%);top:96px;bottom:96px}
   .sidebar.collapsed .side-brand,.sidebar.collapsed .side-item-label,.sidebar.collapsed .uc-info{display:none}
   .sidebar.collapsed .side-top{justify-content:center;margin-bottom:30px}
   .sidebar.collapsed .side-toggle{margin-left:0}
@@ -1030,12 +1025,41 @@ button.stat:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .plan-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
 .plan-opt{
   border:1px solid var(--line);border-radius:12px;padding:16px;background:var(--bg);
-  display:flex;flex-direction:column;gap:6px;align-items:flex-start;position:relative;overflow:hidden;
+  display:flex;flex-direction:column;gap:6px;align-items:flex-start;position:relative;overflow:visible;
 }
 .plan-opt::after{content:'';position:absolute;right:0;top:0;bottom:0;width:3px;background:repeating-linear-gradient(to bottom,var(--line-2) 0 6px,transparent 6px 14px)}
 .plan-opt b{font-size:14px;font-weight:650}
 .plan-opt span{font-size:13px;color:var(--muted)}
 .plan-opt .btn{margin-top:8px}
+.plan-opt:hover,.plan-opt:focus,.plan-opt:focus-within{z-index:20}
+.plan-opt:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.plan-spec-mark{
+  position:absolute;right:12px;top:12px;width:18px;height:18px;border:0;
+  display:grid;place-items:center;font-family:var(--mono);font-size:10px;color:var(--faint);background:transparent;
+}
+/* Spec sheet tears away above the card, never inside it. */
+.plan-spec{
+  position:absolute;z-index:30;left:0;bottom:calc(100% + 12px);width:max(100%,270px);max-width:340px;
+  background:var(--surface);border:1px solid var(--line-2);border-radius:12px;padding:16px;
+  box-shadow:var(--shadow-md);opacity:0;visibility:hidden;transform:translateY(8px);
+  transition:opacity .18s ease,transform .18s ease,visibility .18s;
+  pointer-events:none;
+}
+.plan-spec::after{
+  content:'';position:absolute;left:26px;bottom:-6px;width:10px;height:10px;
+  background:var(--surface);border-right:1px solid var(--line-2);border-bottom:1px solid var(--line-2);
+  transform:rotate(45deg);
+}
+.plan-opt:hover .plan-spec,.plan-opt:focus .plan-spec,.plan-opt:focus-within .plan-spec{
+  opacity:1;visibility:visible;transform:translateY(0);pointer-events:auto;
+}
+.plan-spec-head{display:flex;flex-direction:column;gap:3px;padding-bottom:10px;border-bottom:1px dashed var(--line-2)}
+.plan-spec-head b{font-size:15px}
+.plan-spec-head span{font-size:11px}
+.plan-spec-price{margin-top:10px;font-family:var(--mono);font-size:17px;font-weight:700;letter-spacing:-.03em;color:var(--text)}
+.plan-spec-credits{margin-top:2px;font-family:var(--mono);font-size:12px;color:var(--accent)}
+.plan-spec-list{margin:10px 0 0;padding-left:16px;font-size:12px;line-height:1.55;color:var(--text)}
+.plan-spec-list li + li{margin-top:3px}
 .table-wrap{overflow-x:auto;margin:0 -6px}
 table{width:100%;border-collapse:collapse;font-size:13.8px}
 th{text-align:left;font-family:var(--mono);font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;padding:0 12px 12px;white-space:nowrap;color:var(--muted)}
@@ -1092,7 +1116,6 @@ tbody tr:hover{background:rgba(15,23,42,.025)}
     width:100%;flex:0 0 auto;height:auto;position:relative;flex-direction:row;align-items:center;gap:4px;
     padding:var(--side-pad);overflow-x:auto;border-right:none;border-bottom:1px solid var(--line);
   }
-  .sidebar::before{display:none}
   .side-top,.side-brand{display:none}
   .side-item{width:auto;white-space:nowrap;padding:8px 12px}
   .side-item.mobile-only{display:flex}
