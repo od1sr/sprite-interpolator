@@ -47,6 +47,7 @@ temp/
 *.zip
 *.tar
 *.gz
+*.mp4
 
 # AI model weights (downloaded locally, not committed)
 ai/weights/**/*.pth
