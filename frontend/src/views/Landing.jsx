@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import ThemeToggle from '../components/ThemeToggle';
 import originalVideoUrl from '../../original.MP4?url';
 import resultVideoUrl from '../../result.mp4?url';
 import backOneVideoUrl from '../../result_back_1.mp4?url';
@@ -149,7 +150,7 @@ function LedgerGroup({ title, description, plans, onAuthClick }) {
   );
 }
 
-export default function Landing({ onAuthClick }) {
+export default function Landing({ onAuthClick, theme, onToggleTheme }) {
   const rootRef = useRef(null);
   const stageRef = useRef(null);
   const beforeRef = useRef(null);
@@ -285,6 +286,7 @@ export default function Landing({ onAuthClick }) {
             <a onClick={() => scrollTo('pricing')}>Тарифы</a>
           </nav>
           <div className="nav-actions">
+            <ThemeToggle theme={theme} onToggle={onToggleTheme} />
             <button className="btn btn-ghost" onClick={() => onAuthClick('login')}>Войти</button>
             <button className="btn btn-primary" onClick={() => onAuthClick('register')}>Создать аккаунт</button>
           </div>

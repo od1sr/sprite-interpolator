@@ -25,6 +25,7 @@ import type {
 import { useAuth } from './hooks/useAuth';
 import { formatDuration, getStepTiming } from './utils/processingTime';
 import Sidebar from './components/Sidebar';
+import ThemeToggle from './components/ThemeToggle';
 import Auth from './views/Auth';
 import Dashboard from './views/Dashboard';
 import Landing from './views/Landing';
@@ -34,6 +35,7 @@ import Settings from './views/Settings';
 import './App.css';
 
 type View = 'landing' | 'auth' | 'dashboard' | 'new' | 'projects' | 'settings';
+type Theme = 'light' | 'dark';
 
 interface ExportProfile {
   id: string;
@@ -329,6 +331,13 @@ export default function App() {
   const currentUserId = user ? (user as User).id : null;
   const tokenBalance = user ? (user as User).token_balance : 0;
   const [view, setView] = useState<View>('landing');
+  const [theme, setTheme] = useState<Theme>(() => {
+    try {
+      return window.localStorage.getItem('zarya.theme') === 'dark' ? 'dark' : 'light';
+    } catch {
+      return 'light';
+    }
+  });
   const [projectFilter, setProjectFilter] = useState('all');
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [file, setFile] = useState<File | null>(null);
@@ -368,6 +377,19 @@ export default function App() {
     setSmartColor(false);
     setSharpness(0);
   };
+
+  const toggleTheme = () => {
+    setTheme((current) => current === 'dark' ? 'light' : 'dark');
+  };
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      window.localStorage.setItem('zarya.theme', theme);
+    } catch {
+      // Storage can be disabled; the theme still applies for this session.
+    }
+  }, [theme]);
 
   useEffect(() => {
     const handleUnauthorized = () => {
@@ -861,10 +883,14 @@ export default function App() {
       );
     }
 
-    return <Landing onAuthClick={(mode: 'login' | 'register') => {
-      setAuthMode(mode);
-      setView('auth');
-    }} />;
+    return <Landing
+      onAuthClick={(mode: 'login' | 'register') => {
+        setAuthMode(mode);
+        setView('auth');
+      }}
+      theme={theme}
+      onToggleTheme={toggleTheme}
+    />;
   }
 
   const handleLogout = async () => {
@@ -887,6 +913,7 @@ export default function App() {
             <h1>{VIEW_TITLES[view]}</h1>
           </div>
           <div className="topbar-actions">
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <div className="token-balance" title="Доступные токены">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M12 2l7 4v12l-7 4-7-4V6z" />
