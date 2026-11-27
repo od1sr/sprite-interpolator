@@ -16,6 +16,7 @@ import type {
   ExportJob,
   Job,
   Project,
+  User,
   Video,
 } from './types/api';
 import { useAuth } from './hooks/useAuth';
@@ -274,6 +275,7 @@ function TaskRow({
 
 export default function App() {
   const { user, isLoading, login, register, logout, getPlan, updateProfile } = useAuth();
+  const currentUserId = user ? (user as User).id : null;
   const [view, setView] = useState<View>('landing');
   const [projectFilter, setProjectFilter] = useState('all');
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -504,6 +506,21 @@ export default function App() {
         setError(getErrorMessage(requestError, 'Не удалось получить результат обработки'));
       });
   }, [job?.id, job?.status]);
+
+  // Load the workspace as soon as the session is known, so the dashboard
+  // counters are correct on the first render after login or page reload.
+  useEffect(() => {
+    if (!currentUserId) return;
+    let active = true;
+    listProjects()
+      .then((page) => {
+        if (active) setProjects((current) => mergeProjects(current, page.items));
+      })
+      .catch((requestError: unknown) => {
+        if (active) setError(getErrorMessage(requestError, 'Не удалось загрузить проекты'));
+      });
+    return () => { active = false; };
+  }, [currentUserId]);
 
   useEffect(() => {
     if (view !== 'projects') return;
