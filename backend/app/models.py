@@ -24,6 +24,23 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class Payment(Base):
+    """Real token grant or purchase, used for the payment history."""
+
+    __tablename__ = "payments"
+    __table_args__ = (
+        Index("ix_payments_user_id_created_at", "user_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    plan: Mapped[str] = mapped_column(String(32))
+    amount_rub: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    status: Mapped[str] = mapped_column(String(16), default="paid", server_default="paid")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 class Video(Base):
     __tablename__ = "videos"
     __table_args__ = (

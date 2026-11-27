@@ -13,5 +13,10 @@ ai/_*.py
 ai/*.log
 frontend/.env
 frontend/.env.local
+# Demo videos stay on the host and are bind-mounted into the frontend container.
+frontend/*.mp4
+frontend/*.MP4
+frontend/*.mov
+frontend/*.webm
 backend/.env
 ai/.env

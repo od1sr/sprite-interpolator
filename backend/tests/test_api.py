@@ -4,8 +4,8 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy import select
 
-from app.config import PLAN_TOKENS
-from app.models import ExportJob, Job, Result, User, Video
+from app.config import PLAN_PRICES, PLAN_TOKENS
+from app.models import ExportJob, Job, Payment, Result, User, Video
 from app.storage import user_relative_path
 
 
@@ -701,6 +701,13 @@ def test_register_login_me_and_duplicate_username(client):
     assert registered.json()["plan"] == "free"
     assert registered.json()["token_balance"] == PLAN_TOKENS["free"]
     assert "password" not in registered.json()
+
+    with sessions() as session:
+        grant = session.scalar(select(Payment).where(Payment.plan == "free"))
+        assert grant is not None
+        assert grant.amount_rub == 0
+        assert grant.tokens == PLAN_TOKENS["free"]
+        assert grant.status == "free"
     assert test_client.get("/api/v1/auth/me").json()["username"] == "newuser"
 
     duplicate = test_client.post(
@@ -747,6 +754,57 @@ def test_plan_purchase_adds_tokens_to_user_balance(client, user):
         assert stored.token_balance == 300 + 2 * PLAN_TOKENS["start"]
 
 
+def test_payment_history_records_real_purchases_and_is_user_scoped(client):
+    test_client, sessions = client
+
+    assert test_client.get("/api/v1/billing/payments").json() == []
+    assert test_client.post("/api/v1/billing/purchase", json={"plan": "creator"}).status_code == 200
+    assert test_client.post("/api/v1/billing/purchase", json={"plan": "start"}).status_code == 200
+
+    history = test_client.get("/api/v1/billing/payments").json()
+    assert len(history) == 2
+    assert {item["plan"] for item in history} == {"creator", "start"}
+    creator = next(item for item in history if item["plan"] == "creator")
+    assert creator["amount_rub"] == PLAN_PRICES["creator"]
+    assert creator["tokens"] == PLAN_TOKENS["creator"]
+    assert creator["status"] == "paid"
+    assert creator["created_at"].endswith("Z")
+
+    from app.auth import hash_password
+
+    with sessions() as session:
+        other = User(
+            username="other",
+            password_hash=hash_password("password123"),
+            token_balance=PLAN_TOKENS["free"],
+        )
+        session.add(other)
+        session.flush()
+        session.add(
+            Payment(
+                user_id=other.id,
+                plan="pro",
+                amount_rub=PLAN_PRICES["pro"],
+                tokens=PLAN_TOKENS["pro"],
+                status="paid",
+            )
+        )
+        session.commit()
+
+    test_client.cookies.clear()
+    assert test_client.post(
+        "/api/v1/auth/login", json={"username": "other", "password": "password123"}
+    ).status_code == 200
+    other_history = test_client.get("/api/v1/billing/payments").json()
+    assert [item["plan"] for item in other_history] == ["pro"]
+
+
+def test_payment_history_requires_auth(client):
+    test_client, _ = client
+    test_client.cookies.clear()
+    assert test_client.get("/api/v1/billing/payments").status_code == 401
+
+
 def test_plan_purchase_rejects_unknown_plan(client):
     test_client, _ = client
     response = test_client.post("/api/v1/billing/purchase", json={"plan": "unknown"})
@@ -761,6 +819,7 @@ def test_plan_purchase_rejects_free_after_registration(client, user):
     assert response.json()["error"]["code"] == "PLAN_UNAVAILABLE"
     with sessions() as session:
         assert session.get(User, user.id).token_balance == 300
+        assert session.scalar(select(Payment).where(Payment.user_id == user.id)) is None
 
 
 def test_plan_purchase_requires_auth(client):

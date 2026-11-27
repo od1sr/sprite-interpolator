@@ -55,6 +55,17 @@ PLAN_TOKENS = {
     "enterprise": 70000,
 }
 
+# Price in rubles stored in payment history. Enterprise is a starting price.
+PLAN_PRICES = {
+    "free": 0,
+    "start": 290,
+    "creator": 590,
+    "pro": 1490,
+    "business_start": 14900,
+    "business_pro": 29900,
+    "enterprise": 49900,
+}
+
 # Color-correction presets shared by API validation and the AI service.
 COLOR_PRESETS = ("natural", "cinema", "vivid", "warm", "cool")
 

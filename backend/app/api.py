@@ -11,6 +11,7 @@ from app.config import (
     COLOR_PRESETS,
     EXPORT_PROFILES,
     EXPORT_TOKEN_COST,
+    PLAN_PRICES,
     PLAN_TOKENS,
     STEP_ORDER,
     settings,
@@ -39,7 +40,7 @@ from app.billing import (
 from app.database import get_session
 from app.errors import APIError
 from app.media import probe_video
-from app.models import ExportJob, Job, Result, User, Video
+from app.models import ExportJob, Job, Payment, Result, User, Video
 from app.pricing import PricingError, estimate_job_cost, fps_coefficient, resolution_coefficient
 from app.queue import celery_app
 from app.schemas import (
@@ -51,6 +52,7 @@ from app.schemas import (
     JobEstimateResponse,
     JobResponse,
     LoginIn,
+    PaymentOut,
     PlanPurchaseIn,
     ProjectPage,
     RegisterIn,
@@ -296,6 +298,16 @@ def register(payload: RegisterIn, response: Response, session: Session = Depends
     )
     session.add(user)
     try:
+        session.flush()
+        session.add(
+            Payment(
+                user_id=user.id,
+                plan="free",
+                amount_rub=PLAN_PRICES["free"],
+                tokens=PLAN_TOKENS["free"],
+                status="free",
+            )
+        )
         session.commit()
         session.refresh(user)
     except SQLAlchemyError as exc:
@@ -350,6 +362,15 @@ def purchase_plan(
         )
     user.plan = plan
     user.token_balance += PLAN_TOKENS[plan]
+    session.add(
+        Payment(
+            user_id=user.id,
+            plan=plan,
+            amount_rub=PLAN_PRICES[plan],
+            tokens=PLAN_TOKENS[plan],
+            status="paid",
+        )
+    )
     try:
         session.commit()
         session.refresh(user)
@@ -358,6 +379,21 @@ def purchase_plan(
         raise APIError(500, "INTERNAL_ERROR", "Не удалось начислить токены") from exc
     logger.info("User %s purchased plan %s (+%d tokens)", user.id, plan, PLAN_TOKENS[plan])
     return user
+
+
+@router.get("/billing/payments", response_model=list[PaymentOut])
+def list_payments(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> list[Payment]:
+    """Return the current user's real payment history, newest first."""
+    return list(
+        session.scalars(
+            select(Payment)
+            .where(Payment.user_id == user.id)
+            .order_by(Payment.created_at.desc(), Payment.id.desc())
+        ).all()
+    )
 
 
 @router.post("/videos", response_model=VideoResponse, status_code=status.HTTP_201_CREATED)

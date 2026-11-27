@@ -5,6 +5,7 @@ import type {
   Job,
   JobEstimate,
   LoginRequest,
+  Payment,
   ProjectPage,
   PurchasePlanRequest,
   RegisterRequest,
@@ -84,6 +85,10 @@ export async function logoutUser(): Promise<void> {
 
 export function purchasePlan(payload: PurchasePlanRequest): Promise<User> {
   return jsonRequest<User>('/billing/purchase', 'POST', payload);
+}
+
+export function listPayments(): Promise<Payment[]> {
+  return request<Payment[]>('/billing/payments');
 }
 
 export async function uploadVideo(file: File): Promise<Video> {

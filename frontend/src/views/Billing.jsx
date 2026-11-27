@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { listPayments } from '../api/client';
 
 const PLANS = [
   { id: 'free',     name: 'Free',            price: '0 ₽',        tokens: 300,   rule: 'Пробный доступ при регистрации', group: 'personal' },
@@ -11,20 +12,46 @@ const PLANS = [
 ];
 
 const formatNumber = (value) => new Intl.NumberFormat('ru-RU').format(value || 0);
+const formatDate = (value) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('ru-RU');
+};
+const planName = (id) => PLANS.find((plan) => plan.id === id)?.name || id;
+const STATUS_LABELS = { paid: 'Оплачено', free: 'Бесплатно' };
 
 export default function Billing({ user, onPlanChange }) {
   const [busyPlan, setBusyPlan] = useState(null);
   const [error, setError] = useState('');
+  const [payments, setPayments] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState('');
 
   const currentPlanId = user?.plan || 'free';
   const currentPlan = PLANS.find((plan) => plan.id === currentPlanId) || PLANS[0];
   const balance = user?.token_balance ?? 0;
+
+  const loadPayments = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError('');
+    try {
+      setPayments(await listPayments());
+    } catch (requestError) {
+      setHistoryError(requestError?.message || 'Не удалось загрузить историю платежей.');
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPayments();
+  }, [loadPayments]);
 
   const handleBuy = async (plan) => {
     setBusyPlan(plan.id);
     setError('');
     try {
       await onPlanChange(plan.id);
+      await loadPayments();
     } catch (requestError) {
       setError(requestError?.message || 'Не удалось начислить токены. Попробуйте ещё раз.');
     } finally {
@@ -116,42 +143,44 @@ export default function Billing({ user, onPlanChange }) {
 
       <div className="panel">
         <div className="panel-head"><h3>История платежей</h3></div>
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Дата</th>
-                <th>Тариф</th>
-                <th>Сумма</th>
-                <th>Токены</th>
-                <th>Статус</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>15.11.2025</td>
-                <td>Creator</td>
-                <td>590 ₽</td>
-                <td>2 750</td>
-                <td><span className="pill pill-ok">Оплачено</span></td>
-              </tr>
-              <tr>
-                <td>01.10.2025</td>
-                <td>Start</td>
-                <td>290 ₽</td>
-                <td>1 350</td>
-                <td><span className="pill pill-ok">Оплачено</span></td>
-              </tr>
-              <tr>
-                <td>15.09.2025</td>
-                <td>Free</td>
-                <td>0 ₽</td>
-                <td>300</td>
-                <td><span className="pill">Бесплатно</span></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        {historyLoading ? (
+          <div className="empty">Загружаем историю платежей…</div>
+        ) : historyError ? (
+          <div className="error-banner" role="alert">⚠️ {historyError}</div>
+        ) : payments.length ? (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Дата</th>
+                  <th>Тариф</th>
+                  <th>Сумма</th>
+                  <th>Токены</th>
+                  <th>Статус</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((payment) => (
+                  <tr key={payment.id}>
+                    <td>{formatDate(payment.created_at)}</td>
+                    <td>{planName(payment.plan)}</td>
+                    <td>{payment.plan === 'enterprise' ? 'от ' : ''}{formatNumber(payment.amount_rub)} ₽</td>
+                    <td>{formatNumber(payment.tokens)}</td>
+                    <td>
+                      <span className={payment.status === 'paid' ? 'pill pill-ok' : 'pill'}>
+                        {STATUS_LABELS[payment.status] || payment.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="empty">
+            Платежей пока нет. После регистрации здесь появится бесплатное начисление токенов.
+          </div>
+        )}
       </div>
     </div>
   );

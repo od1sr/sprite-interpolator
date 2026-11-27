@@ -119,6 +119,12 @@ services:
       VITE_API_URL: ${VITE_API_URL:-http://localhost:${BACKEND_PORT:-8000}/api/v1}
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      # Kept out of the build context; mounted at runtime so rebuilds stay small.
+      - ./frontend/original.MP4:/app/original.MP4:ro
+      - ./frontend/result.mp4:/app/result.mp4:ro
+      - ./frontend/result_back_1.mp4:/app/result_back_1.mp4:ro
+      - ./frontend/result_back_2.mp4:/app/result_back_2.mp4:ro
     depends_on:
       backend:
         condition: service_healthy

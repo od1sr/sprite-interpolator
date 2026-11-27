@@ -7,9 +7,9 @@ import backTwoVideoUrl from '../../result_back_2.mp4?url';
 const FEATURES = [
   {
     num: '01',
-    title: 'Интерполяция',
+    title: 'Интерполяция до 16x',
     text: 'Плавные 60 и 120 fps из исходных 24. Движение остаётся чистым, без дрожания и артефактов.',
-    tag: 'до 120 fps',
+    tag: '240+ fps',
     icon: (
       <>
         <rect x="3" y="5" width="7" height="14" rx="2" />
@@ -20,7 +20,7 @@ const FEATURES = [
   },
   {
     num: '02',
-    title: 'Апскейл',
+    title: 'Апскейл до 8к',
     text: 'Нейросетевое увеличение до 4K и 8K с восстановлением мелких деталей и текстур.',
     tag: '4K / 8K',
     icon: (
@@ -34,7 +34,7 @@ const FEATURES = [
   },
   {
     num: '03',
-    title: 'Коррекция цвета',
+    title: 'Автоматическая цветокоррекция',
     text: 'Пресеты, умная выравнивающая LUT и резкость — чтобы весь ролик выглядел единообразно.',
     tag: 'LUT + SHARP',
     icon: (
@@ -309,9 +309,9 @@ export default function Landing({ onAuthClick }) {
                 </button>
               </div>
               <div className="hero-meta">
-                <div><b>×16</b><span>макс. интерполяция</span></div>
-                <div><b>120 FPS</b><span>целевая частота</span></div>
-                <div><b>03</b><span>прохода в цепочке</span></div>
+                <div>интерполяция до 16x</div>
+                <div>апскейл до 8к</div>
+                <div>автоматическая цветокоррекция</div>
               </div>
             </div>
 

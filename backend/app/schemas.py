@@ -254,5 +254,14 @@ class UserOut(APIModel):
     created_at: datetime
 
 
+class PaymentOut(APIModel):
+    id: UUID
+    plan: str
+    amount_rub: int
+    tokens: int
+    status: str
+    created_at: datetime
+
+
 class PlanPurchaseIn(BaseModel):
     plan: str = Field(min_length=1, max_length=32)

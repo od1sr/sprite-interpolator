@@ -174,3 +174,12 @@ export interface LoginRequest {
 export interface PurchasePlanRequest {
   plan: string;
 }
+
+export interface Payment {
+  id: string;
+  plan: string;
+  amount_rub: number;
+  tokens: number;
+  status: 'paid' | 'free' | string;
+  created_at: string;
+}
